@@ -1,0 +1,52 @@
+# .codemender/config.yaml — Google CodeMender CLI Configuration (Cymbal Health)
+# Enforces CM_PLAIN=true / --plain for strict zero-emoji log compliance.
+
+version: "1.0"
+team_id: "cymbal-health-secops"
+plain: true
+
+environment:
+  CM_PLAIN: "true"
+
+vertex_ai:
+  endpoint: "https://aiplatform.googleapis.com"
+  project_id: "cymbal-health-prod"
+  project_number: "123456789012"
+  location: "us-central1"
+  auth_mode: "adc"
+  models:
+    scanner: "gemini-3.8-flash-cyber"
+    verifier: "gemini-3.8-flash-cyber"
+    patcher: "gemini-3.1-pro"
+
+scan:
+  context_file: "CONTEXT.md"
+  target_paths:
+    - "backend/"
+    - "frontend/"
+    - "mcp_backlog_server/"
+    - "Dockerfile"
+  extensions:
+    - ".py"
+    - ".js"
+    - ".html"
+    - ".yaml"
+  exclude_paths:
+    - ".venv/"
+    - "__pycache__/"
+    - ".pytest_cache/"
+
+sandbox:
+  isolated_execution: true
+  require_poc_verification: true
+  zero_false_positives_gate: true
+  test_command: "pytest tests/ -q"
+
+safety:
+  confirm_commands: true
+  confirm_writes: true
+  allow_env_secret_access: false
+
+reporting:
+  sarif_output: "artifacts/codemender_results.sarif"
+  wiz_correlation_skill: ".agent/skills/code-to-cloud-triage/SKILL.md"

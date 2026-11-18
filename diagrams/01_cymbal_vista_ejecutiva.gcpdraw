@@ -1,0 +1,183 @@
+# Cymbal Health: Arquitectura Ejecutiva en 4 Zonas (Desarrollo Agentico, CI/CD Shift-Left, Runtime Serverless y Gobernanza)
+# Etiquetas limpias para cliente (0% terminos internos, 0% emojis).
+
+meta {
+  title "Cymbal Health: Arquitectura Ejecutiva de Desarrollo Agentico y Seguridad Code-to-Cloud"
+}
+
+elements {
+  card users as actores {
+    name "Equipos de Producto"
+    display_name "PM, Dev y Seguridad"
+    description "SSO Corporativo"
+  }
+
+  gcp {
+    group zona_1_ideacion {
+      name "Zona 1: Ideacion Agentica"
+      background_color "#E8F0FE"
+
+      card drive as workspace_docs {
+        name "Google Workspace"
+        display_name "Drive y Docs"
+        description "Politicas y Estandar UX"
+      }
+      card vertex_ai as gemini_enterprise {
+        name "Gemini Enterprise"
+        display_name "Grounding + MCP"
+        description "Genera PRD e Issue #42"
+      }
+      card cloud_workstations as workstations_agy {
+        name "Cloud Workstations"
+        display_name "Antigravity IDE"
+        description "0% Codigo en Laptop"
+      }
+    }
+
+    group zona_2_cicd {
+      name "Zona 2: Gate CI/CD (<75s)"
+      background_color "#FEF7E0"
+
+      card git as github_repo {
+        name "GitHub Enterprise"
+        display_name "Issue #42 y PR #1"
+        description "Conexion OAuth 2nd Gen"
+      }
+      card build as cloud_build {
+        name "Cloud Build"
+        display_name "Pipeline Paralelo"
+        description "SA Dedicada CI/CD"
+      }
+      card artifact_registry as artifact_reg {
+        name "Artifact Registry"
+        display_name "Imagenes UID 10001"
+        description "Escaneo CVE Continuo"
+      }
+      card security_command_center as wiz_codemender {
+        name "Wiz Code + CodeMender"
+        display_name "IaC y Sandbox PoC"
+        description "0% Falsos Positivos"
+      }
+    }
+
+    group zona_3_runtime {
+      name "Zona 3: Runtime Serverless Well-Architected"
+      background_color "#E6F4EA"
+
+      card load_balancer as global_lb {
+        name "Global Load Balancer"
+        display_name "External HTTPS ALB"
+        description "Entrada TLS + SSL"
+      }
+      card armor as cloud_armor {
+        name "Cloud Armor WAF"
+        display_name "Defensa Perimetral"
+        description "Reglas OWASP y Rate Limit"
+      }
+      stacked_card run as portal_tier1 {
+        name "Portal Web Tier 1"
+        display_name "Cloud Run (v1 -> v2)"
+        description "Ingress Internal LB + ADC"
+      }
+      card storage as cloud_storage {
+        name "Cloud Storage"
+        display_name "Soportes PDF Privados"
+        description "Acceso Publico Bloqueado"
+      }
+      stacked_card run as agent_tier2 {
+        name "Agente Clinico Tier 2"
+        display_name "Cloud Run + Google ADK"
+        description "Ingress Interno + OIDC"
+      }
+      card sql as cloud_sql {
+        name "Cloud SQL PostgreSQL"
+        display_name "IP Privada + IAM Auth"
+        description "Agente Rol SELECT-Only"
+      }
+      card data_loss_prevention as guardrails_ia {
+        name "Model Armor + DLP"
+        display_name "Guardrails IA (<30ms)"
+        description "Anti-Injection y Ley 1581"
+      }
+      card vertex_ai as vertex_gemini {
+        name "Vertex AI Gemini"
+        display_name "Inferencia Keyless ADC"
+        description "0% API Keys Estaticas"
+      }
+    }
+
+    group zona_4_gobernanza {
+      name "Zona 4: Gobernanza, SecOps y FinOps"
+      background_color "#F3E8FD"
+
+      card ai_hub as agent_registry {
+        name "Agent Registry"
+        display_name "Catalogo ADK y MCP"
+        description "Descubrimiento Gobernado"
+      }
+      card logging as cloud_logging {
+        name "Cloud Logging"
+        display_name "Audit Logs y Trace"
+        description "traceId y callerIp"
+      }
+      card security_command_center as google_secops {
+        name "Google SecOps"
+        display_name "SIEM/SOAR + GTI"
+        description "Correlacion Forense UDM"
+      }
+      card asset_inventory as wiz_cloud {
+        name "Wiz Cloud CDR"
+        display_name "Pub/Sub Tiempo Real"
+        description "Deteccion Drift ClickOps"
+      }
+      card monitoring as finops_cuds {
+        name "FinOps Hub y Billing"
+        display_name "CUDs (28% a 55%)"
+        description "Pool Tokens y Spend Caps"
+      }
+    }
+  }
+}
+
+paths {
+  # PMs y desarrolladores inician el flujo en Zona 1
+  actores -right-> workspace_docs
+
+  # Zona 1: Flujo vertical de ideacion a codigo
+  workspace_docs -down-> gemini_enterprise
+  gemini_enterprise -down-> workstations_agy
+
+  # Zona 1 hacia Zona 2: Creacion de Issue via MCP y apertura de PR #1
+  gemini_enterprise .right.> github_repo
+  workstations_agy -right-> github_repo
+
+  # Zona 2: Flujo vertical del gate de seguridad CI/CD
+  github_repo -down-> cloud_build
+  cloud_build -down-> artifact_reg
+  artifact_reg -down-> wiz_codemender
+
+  # Zona 2 hacia Zona 3: Despliegue sin tiempo de inactividad
+  cloud_build -right-> portal_tier1
+
+  # Zona 3 Columna 1: Perimetro hacia Tier 1 y Storage
+  global_lb -down-> cloud_armor
+  cloud_armor -down-> portal_tier1
+  portal_tier1 -down-> cloud_storage
+
+  # Zona 3 Columna 1 hacia Columna 2: Invocacion interna OIDC, SQL y Guardrails IA
+  portal_tier1 -right-> agent_tier2
+  portal_tier1 -right-> cloud_sql
+  agent_tier2 -down-> cloud_sql
+  cloud_sql (-down->) guardrails_ia
+  agent_tier2 .down.> guardrails_ia
+  guardrails_ia -down-> vertex_gemini
+
+  # Zona 3 hacia Zona 4: Registro, Telemetria, CDR y FinOps
+  agent_tier2 .right.> agent_registry
+  guardrails_ia .right.> cloud_logging
+  agent_registry (-down->) cloud_logging
+  cloud_logging -right-> google_secops
+  cloud_logging -right-> wiz_cloud
+  google_secops (-down->) wiz_cloud
+  wiz_cloud (-down->) finops_cuds
+}

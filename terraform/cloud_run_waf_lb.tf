@@ -1,11 +1,15 @@
-# Well-Architected Serverless Runtime & Perimeter Edge Defense (v1.0 Baseline):
-# - Artifact Registry with Automated Container Vulnerability Scanning
-# - Cloud Run Web Portal (INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER, DRS compliant)
+# Well-Architected Serverless Runtime & Perimeter Edge Defense (v2.0 Agent + RAG):
+# - Artifact Registry with Automated CVE Vulnerability Scanning
+# - Cloud Run Tier 2 Internal-Only Services (cymbal-health-clinical-agent, cymbal-health-backlog-mcp)
+# - Cloud Run Tier 1 Load-Balancer-Only Portal (cymbal-health-web-portal)
 # - Cloud Armor WAF Policy + Global External Application Load Balancer + Managed SSL
 
 locals {
   portal_nip_domain     = "cymbal-health.${google_compute_global_address.lb_ip.address}.nip.io"
-  resolved_portal_image = var.portal_image != "" ? var.portal_image : "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.repo.repository_id}/cymbal-health-web-portal:v1.0"
+  ar_base_path          = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.repo.repository_id}"
+  resolved_portal_image = var.portal_image != "" ? var.portal_image : "${local.ar_base_path}/cymbal-health-web-portal:v2.0"
+  resolved_agent_image  = var.agent_image != "" ? var.agent_image : "${local.ar_base_path}/cymbal-health-clinical-agent:v2.0"
+  resolved_mcp_image    = var.mcp_image != "" ? var.mcp_image : "${local.ar_base_path}/cymbal-health-backlog-mcp:v1.0"
 }
 
 resource "google_artifact_registry_repository" "repo" {
@@ -22,6 +26,213 @@ resource "google_artifact_registry_repository" "repo" {
   }
 
   depends_on = [google_project_service.apis]
+}
+
+resource "google_cloud_run_v2_service" "clinical_agent" {
+  name                 = "cymbal-health-clinical-agent"
+  project              = var.project_id
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  invoker_iam_disabled = false
+  deletion_protection  = false
+  labels               = var.common_labels
+
+  template {
+    service_account = google_service_account.agent_sa.email
+    timeout         = "60s"
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+
+    vpc_access {
+      egress = "PRIVATE_RANGES_ONLY"
+      network_interfaces {
+        network    = google_compute_network.vpc.name
+        subnetwork = google_compute_subnetwork.subnet.name
+      }
+    }
+
+    containers {
+      name  = "clinical-agent"
+      image = local.resolved_agent_image
+
+      ports {
+        container_port = 8080
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "1Gi"
+        }
+        cpu_idle = true
+      }
+
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "GCP_PROJECT_NUMBER"
+        value = var.project_number
+      }
+      env {
+        name  = "GCP_REGION"
+        value = var.region
+      }
+      env {
+        name  = "ENABLE_LIVE_VERTEX_AI"
+        value = "true"
+      }
+      env {
+        name  = "ENABLE_LIVE_MODEL_ARMOR"
+        value = "true"
+      }
+      env {
+        name  = "ENABLE_LIVE_VERTEX_SEARCH"
+        value = "true"
+      }
+      env {
+        name  = "ENABLE_LIVE_DISCOVERY_ENGINE"
+        value = "true"
+      }
+      env {
+        name  = "VERTEX_SEARCH_LOCATION"
+        value = google_discovery_engine_data_store.clinical_protocols.location
+      }
+      env {
+        name  = "VERTEX_SEARCH_DATASTORE_ID"
+        value = google_discovery_engine_data_store.clinical_protocols.data_store_id
+      }
+      env {
+        name  = "DISCOVERY_ENGINE_LOCATION"
+        value = google_discovery_engine_data_store.clinical_protocols.location
+      }
+      env {
+        name  = "DISCOVERY_ENGINE_DATA_STORE_ID"
+        value = google_discovery_engine_data_store.clinical_protocols.data_store_id
+      }
+      env {
+        name  = "DISCOVERY_ENGINE_ENGINE_ID"
+        value = google_discovery_engine_search_engine.clinical_protocols_engine.engine_id
+      }
+      env {
+        name  = "PROTOCOLS_BUCKET"
+        value = google_storage_bucket.protocols.name
+      }
+      env {
+        name  = "DB_INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.pg_main.connection_name
+      }
+      env {
+        name  = "DB_PRIVATE_IP"
+        value = google_sql_database_instance.pg_main.private_ip_address
+      }
+      env {
+        name  = "DB_NAME"
+        value = google_sql_database.cymbal_db.name
+      }
+      env {
+        name  = "DB_IAM_USER"
+        value = google_sql_user.agent_iam_user.name
+      }
+      env {
+        name  = "DB_READONLY_VIEW"
+        value = "clinical_orders_public_v"
+      }
+      env {
+        name  = "SOPORTES_BUCKET"
+        value = google_storage_bucket.soportes.name
+      }
+      env {
+        name  = "ENABLE_LIVE_GCP_STORAGE"
+        value = "true"
+      }
+      env {
+        name  = "MODEL_ARMOR_TEMPLATE_ID"
+        value = google_model_armor_template.clinical_guardrail.id
+      }
+      env {
+        name  = "DLP_INSPECT_TEMPLATE_ID"
+        value = google_data_loss_prevention_inspect_template.colombia_pii_inspect.id
+      }
+      env {
+        name  = "DLP_DEIDENTIFY_TEMPLATE_ID"
+        value = google_data_loss_prevention_deidentify_template.colombia_pii_mask.id
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_service_account_iam_member.cicd_act_as_runtime_sas,
+  ]
+}
+
+resource "google_cloud_run_v2_service" "backlog_mcp" {
+  name                 = "cymbal-health-backlog-mcp"
+  project              = var.project_id
+  location             = var.region
+  ingress              = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  invoker_iam_disabled = false
+  deletion_protection  = false
+  labels               = var.common_labels
+
+  template {
+    service_account = google_service_account.mcp_sa.email
+    timeout         = "60s"
+
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 3
+    }
+
+    vpc_access {
+      egress = "PRIVATE_RANGES_ONLY"
+      network_interfaces {
+        network    = google_compute_network.vpc.name
+        subnetwork = google_compute_subnetwork.subnet.name
+      }
+    }
+
+    containers {
+      name  = "backlog-mcp"
+      image = local.resolved_mcp_image
+
+      ports {
+        container_port = 8080
+      }
+
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = "512Mi"
+        }
+        cpu_idle = true
+      }
+
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "GCP_REGION"
+        value = var.region
+      }
+      env {
+        name  = "GITHUB_PAT_SECRET_ID"
+        value = google_secret_manager_secret.github_pat.secret_id
+      }
+    }
+  }
+
+  depends_on = [
+    google_project_service.apis,
+    google_secret_manager_secret_iam_member.mcp_github_pat_accessor,
+    google_service_account_iam_member.cicd_act_as_runtime_sas,
+  ]
 }
 
 resource "google_cloud_run_v2_service" "web_portal" {
@@ -43,7 +254,7 @@ resource "google_cloud_run_v2_service" "web_portal" {
     }
 
     vpc_access {
-      egress = "PRIVATE_RANGES_ONLY"
+      egress = "ALL_TRAFFIC"
       network_interfaces {
         network    = google_compute_network.vpc.name
         subnetwork = google_compute_subnetwork.subnet.name
@@ -98,6 +309,42 @@ resource "google_cloud_run_v2_service" "web_portal" {
         name  = "ENABLE_LIVE_GCP_STORAGE"
         value = "true"
       }
+      env {
+        name  = "CLINICAL_AGENT_URL"
+        value = google_cloud_run_v2_service.clinical_agent.uri
+      }
+      env {
+        name  = "ENABLE_LIVE_TIER2_OIDC"
+        value = "true"
+      }
+      env {
+        name  = "GCP_PROJECT_NUMBER"
+        value = var.project_number
+      }
+      env {
+        name  = "VERTEX_SEARCH_LOCATION"
+        value = google_discovery_engine_data_store.clinical_protocols.location
+      }
+      env {
+        name  = "VERTEX_SEARCH_DATASTORE_ID"
+        value = google_discovery_engine_data_store.clinical_protocols.data_store_id
+      }
+      env {
+        name  = "DISCOVERY_ENGINE_DATA_STORE_ID"
+        value = google_discovery_engine_data_store.clinical_protocols.data_store_id
+      }
+      env {
+        name  = "MODEL_ARMOR_TEMPLATE_ID"
+        value = google_model_armor_template.clinical_guardrail.id
+      }
+      env {
+        name  = "DLP_INSPECT_TEMPLATE_ID"
+        value = google_data_loss_prevention_inspect_template.colombia_pii_inspect.id
+      }
+      env {
+        name  = "DLP_DEIDENTIFY_TEMPLATE_ID"
+        value = google_data_loss_prevention_deidentify_template.colombia_pii_mask.id
+      }
     }
   }
 
@@ -121,10 +368,10 @@ resource "google_compute_security_policy" "waf_policy" {
   rule {
     action      = "deny(403)"
     priority    = 1000
-    description = "Block OWASP SQL Injection attacks at edge (CRS sqli-v33-stable sensitivity 1)"
+    description = "Block OWASP SQL Injection attacks at edge (CRS sqli-v33-stable sensitivity 1; excludes /api/agent/ so Model Armor inspects prompts)"
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
+        expression = "!request.path.startsWith('/api/agent/') && evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1})"
       }
     }
   }
@@ -143,10 +390,10 @@ resource "google_compute_security_policy" "waf_policy" {
   rule {
     action      = "deny(403)"
     priority    = 1020
-    description = "Block OWASP Remote Code Execution payloads at edge (CRS rce-v33-stable sensitivity 1)"
+    description = "Block OWASP RCE payloads at edge (CRS rce-v33-stable sensitivity 1; excludes /api/agent/ natural language)"
     match {
       expr {
-        expression = "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1})"
+        expression = "!request.path.startsWith('/api/agent/') && evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1})"
       }
     }
   }

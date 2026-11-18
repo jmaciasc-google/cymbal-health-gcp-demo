@@ -1,5 +1,7 @@
-"""Cymbal Health Clinical Authorizations Portal (v1.0 Production Baseline)."""
+"""Cymbal Health Clinical Authorizations & Secure ADK Agent Backend (v2.0)."""
 
 APP_NAME = "Cymbal Health"
 APP_SERVICE_PORTAL = "cymbal-health-web-portal"
-APP_VERSION = "1.0.0"
+APP_SERVICE_AGENT = "cymbal-health-clinical-agent"
+APP_SERVICE_MCP = "cymbal-health-backlog-mcp"
+APP_VERSION = "2.0.0"

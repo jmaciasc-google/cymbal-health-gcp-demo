@@ -1,8 +1,5 @@
-# Private Data Plane & Continuous Cloud Audit Streaming (v1.0 Baseline):
-# - Cloud SQL PostgreSQL 15 (Private IP via PSA + IAM Database Authentication)
-# - Private Cloud Storage Bucket for Diagnostic Medical Order PDFs
-# - Secret Manager Containers for CI/CD Security Scanning
-# - Cloud Audit Logs -> Pub/Sub Streaming Pipeline
+# Private Data Plane: Cloud SQL PostgreSQL 15 (Private IP + IAM DB Auth),
+# Private Cloud Storage Bucket for Diagnostic Medical Order PDFs, and Secret Manager Containers.
 
 resource "google_sql_database_instance" "pg_main" {
   name                = "cymbal-health-pg-main"
@@ -72,6 +69,13 @@ resource "google_sql_user" "portal_iam_user" {
   type     = "CLOUD_IAM_SERVICE_ACCOUNT"
 }
 
+resource "google_sql_user" "agent_iam_user" {
+  name     = trimsuffix(google_service_account.agent_sa.email, ".gserviceaccount.com")
+  project  = var.project_id
+  instance = google_sql_database_instance.pg_main.name
+  type     = "CLOUD_IAM_SERVICE_ACCOUNT"
+}
+
 resource "google_storage_bucket" "soportes" {
   name                        = "cymbal-health-soportes-${var.project_number}"
   project                     = var.project_id
@@ -88,6 +92,22 @@ resource "google_storage_bucket" "soportes" {
 
   soft_delete_policy {
     retention_duration_seconds = 604800
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_secret_manager_secret" "github_pat" {
+  secret_id = "cymbal-health-github-pat"
+  project   = var.project_id
+  labels    = var.common_labels
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
   }
 
   depends_on = [google_project_service.apis]
@@ -121,45 +141,6 @@ resource "google_secret_manager_secret" "wiz_client_secret" {
       }
     }
   }
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_pubsub_topic" "wiz_audit_topic" {
-  name                       = "cymbal-health-wiz-audit-topic"
-  project                    = var.project_id
-  message_retention_duration = "86400s"
-  labels                     = var.common_labels
-
-  depends_on = [google_project_service.apis]
-}
-
-resource "google_pubsub_subscription" "wiz_audit_sub" {
-  name                 = "cymbal-health-wiz-audit-sub"
-  project              = var.project_id
-  topic                = google_pubsub_topic.wiz_audit_topic.id
-  ack_deadline_seconds = 60
-  labels               = var.common_labels
-
-  expiration_policy {
-    ttl = ""
-  }
-}
-
-resource "google_logging_project_sink" "wiz_audit_sink" {
-  name                   = "cymbal-health-wiz-audit-sink"
-  project                = var.project_id
-  destination            = "pubsub.googleapis.com/projects/${var.project_id}/topics/${google_pubsub_topic.wiz_audit_topic.name}"
-  unique_writer_identity = true
-  description            = "Streams Admin Activity and Data Access audit events to Pub/Sub for real-time CDR"
-
-  filter = <<-EOT
-    logName:(
-      "projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Factivity" OR
-      "projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Fdata_access" OR
-      "projects/${var.project_id}/logs/cloudaudit.googleapis.com%2Fpolicy"
-    )
-  EOT
 
   depends_on = [google_project_service.apis]
 }

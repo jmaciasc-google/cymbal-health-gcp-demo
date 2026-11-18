@@ -1,8 +1,9 @@
-"""FastAPI Web Portal Backend for Cymbal Health (v1.0 Production Baseline)."""
+"""FastAPI Web Portal & Clinical Agent Backend for Cymbal Health (v2.0 Secure Release)."""
 
 from __future__ import annotations
 
 import hashlib
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -12,12 +13,20 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from backend import APP_NAME, APP_SERVICE_PORTAL, APP_VERSION
+from backend.clinical_agent_adk import (
+    get_agent_registry_card,
+    router as clinical_agent_router,
+    verify_zero_static_api_keys,
+)
+from backend.datastore_rag import get_datastore_metadata
 from backend.db import (
     create_clinical_order,
+    get_iam_db_auth_metadata,
     get_public_order,
     list_public_orders,
     search_orders,
 )
+from backend.model_armor_dlp import get_recent_security_telemetry
 from backend.seed_data import DEFAULT_PREFILLED_ORDER
 from backend.storage_client import (
     fetch_order_support_pdf,
@@ -67,7 +76,7 @@ class CreateOrderPayload(BaseModel):
 
 
 app = FastAPI(
-    title="Cymbal Health - Autorizaciones Clinicas",
+    title="Cymbal Health - Autorizaciones Clinicas y Asistente ADK",
     version=APP_VERSION,
     docs_url="/api/docs",
     redoc_url=None,
@@ -90,6 +99,8 @@ async def security_headers_middleware(request: Request, call_next: Any) -> Respo
     return response
 
 
+app.include_router(clinical_agent_router)
+
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
@@ -102,6 +113,27 @@ def healthz() -> dict[str, Any]:
         "service": APP_SERVICE_PORTAL,
         "version": APP_VERSION,
         "asset_version": _ASSET_VER,
+        "auth_mode": "adc_iam_keyless",
+    }
+
+
+@app.get("/api/config")
+def get_config() -> dict[str, Any]:
+    project_id = os.getenv("GCP_PROJECT_ID", "cymbal-health-prod")
+    return {
+        "application": APP_NAME,
+        "version": APP_VERSION,
+        "asset_version": _ASSET_VER,
+        "clinical_agent_enabled": True,
+        "least_privilege": {
+            "portal_sa": f"cymbal-health-portal-sa@{project_id}.iam.gserviceaccount.com",
+            "agent_sa": f"cymbal-health-agent-sa@{project_id}.iam.gserviceaccount.com",
+            "mcp_sa": f"cymbal-health-mcp-sa@{project_id}.iam.gserviceaccount.com",
+            "supports_bucket": get_supports_bucket_name(),
+            "vertex_search_datastore": get_datastore_metadata(),
+            "db_auth": get_iam_db_auth_metadata(),
+            "llm_auth": verify_zero_static_api_keys(),
+        },
     }
 
 
@@ -194,6 +226,15 @@ def api_download_order_pdf(order_code: str) -> Response:
             **NO_CACHE_HEADERS,
         },
     )
+
+
+@app.get("/api/security/telemetry")
+def api_security_telemetry() -> dict[str, Any]:
+    return {
+        "version": APP_VERSION,
+        "agent_card": get_agent_registry_card(),
+        "events": get_recent_security_telemetry(),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)

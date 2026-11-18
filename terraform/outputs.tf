@@ -34,8 +34,33 @@ output "cloud_armor_policy_name" {
 }
 
 output "web_portal_internal_uri" {
-  description = "Cloud Run portal internal URI (reachable exclusively via External Load Balancer)."
+  description = "Cloud Run Tier 1 internal URI (reachable exclusively via External Load Balancer)."
   value       = google_cloud_run_v2_service.web_portal.uri
+}
+
+output "clinical_agent_internal_uri" {
+  description = "Cloud Run Tier 2 ADK clinical agent internal URI (INGRESS_TRAFFIC_INTERNAL_ONLY + OIDC)."
+  value       = google_cloud_run_v2_service.clinical_agent.uri
+}
+
+output "backlog_mcp_internal_uri" {
+  description = "Cloud Run Tier 2 GitHub Backlog MCP internal URI (INGRESS_TRAFFIC_INTERNAL_ONLY + OIDC)."
+  value       = google_cloud_run_v2_service.backlog_mcp.uri
+}
+
+output "clinical_protocols_datastore_id" {
+  description = "Vertex AI Search Data Store ID for clinical authorization protocols."
+  value       = google_discovery_engine_data_store.clinical_protocols.data_store_id
+}
+
+output "clinical_protocols_engine_id" {
+  description = "Vertex AI Search Engine ID for clinical authorization protocols."
+  value       = google_discovery_engine_search_engine.clinical_protocols_engine.engine_id
+}
+
+output "protocols_bucket_name" {
+  description = "Private Cloud Storage bucket hosting clinical authorization protocol documents."
+  value       = google_storage_bucket.protocols.name
 }
 
 output "cloudsql_instance_connection_name" {
@@ -55,14 +80,29 @@ output "soportes_bucket_name" {
 
 output "artifact_registry_repo" {
   description = "Artifact Registry Docker repository path."
-  value       = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.repo.repository_id}"
+  value       = local.ar_base_path
 }
 
 output "service_accounts" {
   description = "Dedicated least-privilege Service Accounts."
   value = {
     portal = google_service_account.portal_sa.email
+    agent  = google_service_account.agent_sa.email
+    mcp    = google_service_account.mcp_sa.email
     cicd   = google_service_account.cicd_sa.email
+  }
+}
+
+output "model_armor_template_id" {
+  description = "Model Armor template resource ID."
+  value       = google_model_armor_template.clinical_guardrail.id
+}
+
+output "dlp_templates" {
+  description = "Cloud DLP inspect and deidentify template IDs."
+  value = {
+    inspect    = google_data_loss_prevention_inspect_template.colombia_pii_inspect.id
+    deidentify = google_data_loss_prevention_deidentify_template.colombia_pii_mask.id
   }
 }
 

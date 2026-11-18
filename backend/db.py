@@ -1,13 +1,9 @@
-"""Database access layer for Cymbal Health v1.0 Clinical Authorizations Portal.
-
-Connects to Cloud SQL for PostgreSQL 15 over Private IP using IAM Database
-Authentication (keyless OAuth2 access token via Google Cloud ADC — zero static
-passwords), with a deterministic SQLite mirror for local execution and CI tests.
-"""
+"""Database access layer for Cymbal Health v2.0 with Least Privilege read-only SQL enforcement."""
 
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
@@ -18,9 +14,18 @@ from backend.seed_data import DEFAULT_PREFILLED_ORDER, SEED_CLINICAL_ORDERS
 _DB_LOCK = threading.Lock()
 _SHARED_CONN: sqlite3.Connection | None = None
 
+FORBIDDEN_SQL_KEYWORDS = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|ATTACH|DETACH|"
+    r"PRAGMA|GRANT|REVOKE|VACUUM|COPY|EXEC|EXECUTE|CALL)\b",
+    re.IGNORECASE,
+)
+
+
+class ReadOnlyPolicyViolationError(PermissionError):
+    """Raised when `cymbal-clinical-agent` attempts a non-SELECT or unauthorized table query."""
+
 
 def get_iam_db_auth_metadata() -> dict[str, Any]:
-    """Returns Cloud SQL IAM Database Authentication configuration metadata."""
     project_id = os.getenv("GCP_PROJECT_ID", "cymbal-health-prod")
     use_cloud_sql = (
         os.getenv("USE_CLOUD_SQL_IAM_AUTH", "false").lower() == "true"
@@ -36,6 +41,7 @@ def get_iam_db_auth_metadata() -> dict[str, Any]:
         or os.getenv("DB_IAM_USER_PORTAL")
         or f"cymbal-health-portal-sa@{project_id}.iam"
     )
+    agent_db_user = os.getenv("DB_IAM_USER_AGENT", "cymbal_agent_readonly")
     return {
         "engine": "cloudsql-postgresql-15-iam" if use_cloud_sql else "sqlite-local-mirror",
         "iam_db_authentication": True,
@@ -43,6 +49,8 @@ def get_iam_db_auth_metadata() -> dict[str, Any]:
         "private_ip_only": True,
         "instance_connection_name": instance_conn,
         "portal_db_principal": portal_db_user,
+        "agent_db_role": agent_db_user,
+        "agent_authorized_view": "clinical_orders_public_v",
     }
 
 
@@ -178,7 +186,6 @@ def get_public_order(order_code: str) -> dict[str, Any] | None:
 
 
 def search_orders(query: str) -> dict[str, Any]:
-    """Searches clinical authorizations using parameterized SQL on `clinical_orders_public_v`."""
     cleaned = (query or "").strip()
     if not cleaned:
         items = list_public_orders()
@@ -273,3 +280,51 @@ def create_clinical_order(
     created = get_public_order(order_code)
     assert created is not None
     return created
+
+
+def validate_readonly_agent_sql(sql: str) -> str:
+    candidate = (sql or "").strip()
+    if not candidate:
+        raise ReadOnlyPolicyViolationError("Empty SQL query rejected by agent read-only policy.")
+    if candidate.endswith(";"):
+        candidate = candidate[:-1].strip()
+    if ";" in candidate or "--" in candidate or "/*" in candidate or "*/" in candidate:
+        raise ReadOnlyPolicyViolationError(
+            "Multi-statement or commented SQL is forbidden for role cymbal_agent_readonly."
+        )
+    if not candidate.upper().startswith("SELECT "):
+        raise ReadOnlyPolicyViolationError(
+            "Role cymbal_agent_readonly only permits SELECT statements."
+        )
+    if FORBIDDEN_SQL_KEYWORDS.search(candidate):
+        raise ReadOnlyPolicyViolationError(
+            "Mutating or administrative SQL keyword blocked by Least Privilege policy."
+        )
+    lowered = candidate.lower()
+    if "clinical_orders_public_v" not in lowered:
+        raise ReadOnlyPolicyViolationError(
+            "Role cymbal_agent_readonly is restricted exclusively to view clinical_orders_public_v."
+        )
+    if re.search(r"\bclinical_orders\b(?!_public_v)", lowered):
+        raise ReadOnlyPolicyViolationError(
+            "Direct access to base table clinical_orders is denied for cymbal-health-agent-sa."
+        )
+    if "sqlite_" in lowered or "pg_" in lowered or "information_schema" in lowered:
+        raise ReadOnlyPolicyViolationError(
+            "System catalog introspection is denied for cymbal_agent_readonly."
+        )
+    return candidate
+
+
+def execute_readonly_agent_query(
+    sql: str, params: tuple[Any, ...] = ()
+) -> list[dict[str, Any]]:
+    validated_sql = validate_readonly_agent_sql(sql)
+    conn = get_connection()
+    with _DB_LOCK:
+        conn.execute("PRAGMA query_only = ON")
+        try:
+            rows = conn.execute(validated_sql, params).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.execute("PRAGMA query_only = OFF")

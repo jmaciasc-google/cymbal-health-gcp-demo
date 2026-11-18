@@ -3,6 +3,7 @@
 
   const state = {
     statusFilter: "ALL",
+    activeOrderCode: null,
     defaults: null,
   };
 
@@ -144,6 +145,7 @@
     const data = await resp.json();
     const item = data.item;
     if (!item) return;
+    state.activeOrderCode = item.order_code;
 
     const pdfUrl =
       data.support_pdf_url || `/api/orders/${encodeURIComponent(item.order_code)}/support.pdf`;
@@ -170,10 +172,73 @@
     openModal("modal-order-detail");
   }
 
+  async function submitClinicalAgentPrompt(promptText, orderCode) {
+    const feed = qs("#agent-feed");
+    const sendBtn = qs("#btn-send-agent");
+    feed.insertAdjacentHTML(
+      "beforeend",
+      `<div class="agent-msg agent-msg-user"><span class="msg-role">Consulta medica</span><p>${escapeHtml(promptText)}</p></div>`
+    );
+    sendBtn.disabled = true;
+
+    try {
+      const resp = await fetch("/api/agent/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText, order_code: orderCode || null }),
+      });
+      const payload = await resp.json();
+      const result = resp.ok ? payload : payload.detail || payload;
+
+      if (!resp.ok || result.allowed === false) {
+        feed.insertAdjacentHTML(
+          "beforeend",
+          `<div class="agent-msg agent-msg-blocked">
+            <span class="msg-role">Politica de seguridad clinica</span>
+            <p>${escapeHtml(result.answer || "Solicitud bloqueada por control de seguridad.")}</p>
+          </div>`
+        );
+      } else {
+        const citations = [];
+        if (Array.isArray(result.protocols_referenced)) {
+          result.protocols_referenced.forEach((code) => {
+            citations.push(`<span class="citation-pill">Protocolo ${escapeHtml(code)}</span>`);
+          });
+        }
+        if (Array.isArray(result.orders_referenced)) {
+          result.orders_referenced.slice(0, 3).forEach((code) => {
+            citations.push(`<span class="citation-pill">Orden ${escapeHtml(code)}</span>`);
+          });
+        }
+        if (Array.isArray(result.dlp_findings) && result.dlp_findings.length > 0) {
+          citations.push('<span class="citation-pill">PII protegida Ley 1581</span>');
+        }
+        const citationHtml =
+          citations.length > 0 ? `<div class="citation-row">${citations.join("")}</div>` : "";
+        feed.insertAdjacentHTML(
+          "beforeend",
+          `<div class="agent-msg">
+            <span class="msg-role">Asistente Clinico Cymbal</span>
+            <p>${escapeHtml(result.answer)}</p>
+            ${citationHtml}
+          </div>`
+        );
+      }
+      feed.scrollTop = feed.scrollHeight;
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
   function bindEvents() {
     qs("#btn-open-new-order")?.addEventListener("click", () => {
       populateOrderDefaults();
       openModal("modal-new-order");
+    });
+
+    qs("#btn-open-clinical-agent")?.addEventListener("click", () => {
+      openModal("modal-clinical-agent");
+      qs("#input-agent-prompt")?.focus();
     });
 
     qsa("[data-close-modal]").forEach((btn) => {
@@ -209,6 +274,18 @@
       if (btn) openOrderDetailModal(btn.dataset.viewOrder);
     });
 
+    qs("#btn-ask-agent-from-order")?.addEventListener("click", async () => {
+      const code = state.activeOrderCode;
+      closeModal("modal-order-detail");
+      openModal("modal-clinical-agent");
+      if (code) {
+        await submitClinicalAgentPrompt(
+          `Indica el estado actual, protocolo CUPS aplicable y preparacion del paciente para la orden ${code}`,
+          code
+        );
+      }
+    });
+
     qs("#form-create-order")?.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const fd = new FormData(ev.target);
@@ -225,11 +302,20 @@
       }
     });
 
+    qs("#form-agent-query")?.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const input = qs("#input-agent-prompt");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      await submitClinicalAgentPrompt(text, null);
+    });
+
     const params = new URLSearchParams(window.location.search);
-    if (params.get("openModal") === "new-order") {
+    if (params.get("openModal") === "agent") {
+      openModal("modal-clinical-agent");
+    } else if (params.get("openModal") === "new-order") {
       openModal("modal-new-order");
-    } else if (params.get("openOrder")) {
-      openOrderDetailModal(params.get("openOrder"));
     }
   }
 

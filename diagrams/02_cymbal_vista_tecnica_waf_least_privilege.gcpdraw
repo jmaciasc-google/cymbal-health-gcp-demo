@@ -1,0 +1,160 @@
+# Cymbal Health: Arquitectura Tecnica Well-Architected N-Tier y Minimo Privilegio Estricto
+# Fronteras de confianza, Ingress Interno, OIDC, ADC sin llaves, IAM DB Auth y CDR hacia Wiz Cloud.
+
+meta {
+  title "Cymbal Health: Arquitectura Tecnica Well-Architected N-Tier y Minimo Privilegio (0% Llaves Estaticas)"
+}
+
+elements {
+  card laptop_and_phone as cliente_medico {
+    name "Personal Clinico"
+    display_name "Navegador HTTPS"
+    description "TLS 1.3 Externo"
+  }
+
+  gcp {
+    group frontera_1_waf {
+      name "Frontera 1: Perimetro WAF"
+      background_color "#E8F0FE"
+
+      card load_balancer as ext_alb {
+        name "External App LB"
+        display_name "IP Global + SSL"
+        description "Serverless NEG Interno"
+      }
+      card armor as armor_waf {
+        name "Cloud Armor WAF"
+        display_name "OWASP v33 Stable"
+        description "SQLi, XSS, RCE, Rate"
+      }
+    }
+
+    group frontera_2_tier1 {
+      name "Frontera 2: Tier 1 Portal"
+      background_color "#E6F4EA"
+
+      stacked_card run as run_portal {
+        name "cymbal-health-web-portal"
+        display_name "Cloud Run (UID 10001)"
+        description "INGRESS_INTERNAL_LB"
+      }
+      card iam as sa_portal {
+        name "cymbal-health-portal-sa"
+        display_name "SA Dedicada Tier 1"
+        description "run.invoker + GCS RW"
+      }
+    }
+
+    group frontera_3_tier2 {
+      name "Frontera 3: Tier 2 Interno (OIDC)"
+      background_color "#FEF7E0"
+
+      stacked_card run as run_agent {
+        name "cymbal-health-clinical-agent"
+        display_name "Cloud Run ADK (UID 10001)"
+        description "INGRESS_INTERNAL_ONLY"
+      }
+      card iam as sa_agent {
+        name "cymbal-health-agent-sa"
+        display_name "SA Dedicada Tier 2"
+        description "ADC: Vertex, Armor, DLP"
+      }
+      card run as run_mcp {
+        name "cymbal-health-backlog-mcp"
+        display_name "Cloud Run MCP (UID 10001)"
+        description "INGRESS_INTERNAL_ONLY"
+      }
+      card iam as sa_mcp {
+        name "cymbal-health-mcp-sa"
+        display_name "SA Dedicada MCP"
+        description "Solo secreto github-pat"
+      }
+    }
+
+    group frontera_4_datos {
+      name "Frontera 4: Guardrails y Datos Privados"
+      background_color "#FCE8E6"
+
+      card data_loss_prevention as inline_guardrails {
+        name "Model Armor + DLP"
+        display_name "Filtro Inline <30ms"
+        description "Prompt y CC Ley 1581"
+      }
+      card vertex_ai as vertex_adc {
+        name "Vertex AI Gemini"
+        display_name "Keyless ADC"
+        description "0% API Keys Estaticas"
+      }
+      card sql as sql_iam {
+        name "Cloud SQL PostgreSQL 15"
+        display_name "IP Privada PSA + IAM Auth"
+        description "Agente: Rol SELECT-Only"
+      }
+      card storage as gcs_ubla {
+        name "Bucket Soportes PDF"
+        display_name "UBLA + Public Blocked"
+        description "Portal RW / Agente RO"
+      }
+      card secret_manager as sec_mgr {
+        name "Secret Manager"
+        display_name "Resource-Level IAM"
+        description "Aislamiento por Secreto"
+      }
+    }
+
+    group frontera_5_auditoria {
+      name "Frontera 5: Auditoria y CDR"
+      background_color "#F3E8FD"
+
+      card logging as audit_sink {
+        name "Cloud Audit Logs"
+        display_name "Admin + Data Access"
+        description "Sink Writer SA Dedicada"
+      }
+      card pubsub as pubsub_audit {
+        name "Pub/Sub Audit Topic"
+        display_name "Stream Eventos IAM"
+        description "roles/pubsub.publisher"
+      }
+      card asset_inventory as wiz_secops {
+        name "Wiz Cloud + SecOps"
+        display_name "Attack Path y SIEM"
+        description "Org Policies Preventivas"
+      }
+    }
+  }
+}
+
+paths {
+  # Entrada HTTPS al perimetro global
+  cliente_medico -right-> ext_alb : "HTTPS"
+  ext_alb -down-> armor_waf
+
+  # Perimetro hacia Tier 1 exclusivamente por Serverless NEG interno
+  armor_waf -right-> run_portal
+  run_portal .down.> sa_portal
+
+  # Tier 1 invoca Tier 2 con token OIDC firmado
+  run_portal -right-> run_agent
+  run_agent .down.> sa_agent
+  sa_agent (-down->) run_mcp
+  run_mcp .down.> sa_mcp
+
+  # Accesos de minimo privilegio hacia IA, Base de Datos, Storage y Secretos
+  run_agent -right-> inline_guardrails
+  inline_guardrails -down-> vertex_adc
+  vertex_adc (-down->) sql_iam
+  sql_iam (-down->) gcs_ubla
+  gcs_ubla (-down->) sec_mgr
+
+  sa_portal .right.> sql_iam
+  sa_agent .right.> sql_iam
+  sa_portal .right.> gcs_ubla
+  sa_mcp .right.> sec_mgr
+
+  # Streaming continuo de auditoria hacia Pub/Sub, Wiz Cloud y Google SecOps
+  inline_guardrails .right.> audit_sink
+  sql_iam .right.> audit_sink
+  audit_sink -down-> pubsub_audit
+  pubsub_audit -down-> wiz_secops
+}

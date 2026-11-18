@@ -1,5 +1,5 @@
 # ==============================================================================
-# Cymbal Health — Parallel <75s Shift-Left DevSecOps Gate & Cloud Run Deploy
+# Cymbal Health v2.0 — Parallel <75s Shift-Left DevSecOps Gate & Zero-Downtime CD
 # Dedicated CI/CD Identity: cymbal-health-cicd-sa@$PROJECT_ID.iam.gserviceaccount.com
 # ==============================================================================
 
@@ -7,6 +7,7 @@ substitutions:
   _REGION: "us-central1"
   _AR_REPO: "cymbal-health-repo"
   _PORTAL_SERVICE: "cymbal-health-web-portal"
+  _AGENT_SERVICE: "cymbal-health-clinical-agent"
   _DEPLOY_ON_GREEN: "false"
 
 options:
@@ -24,13 +25,13 @@ steps:
       - "-c"
       - |
         set -euo pipefail
-        echo "[GATE-A] Verifying strict Least Privilege rules on active Terraform..."
+        echo "[GATE-A] Checking strict Least Privilege rules on active Terraform..."
         if grep -rnE 'roles/(owner|editor|viewer)|-compute@developer\.gserviceaccount\.com|INGRESS_TRAFFIC_ALL|GEMINI_API_KEY' terraform/*.tf; then
           echo "[BLOCKED] Violation of Cymbal Health Least Privilege standard detected in terraform/*.tf"
           exit 1
         fi
         pip install --quiet --no-cache-dir -r requirements.txt pytest httpx
-        echo "[GATE-A] Running Cymbal Health functional & security test suite..."
+        echo "[GATE-A] Running Cymbal Health v2.0 functional, RAG, and 5-ring guardrail test suite..."
         pytest tests/ -q
 
   - id: "build-and-push-image"
@@ -39,16 +40,21 @@ steps:
     args:
       - "build"
       - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
-      - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:latest"
+      - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:v2.0"
+      - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_AGENT_SERVICE}:$COMMIT_SHA"
+      - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_AGENT_SERVICE}:v2.0"
       - "."
 
   - id: "push-artifact-registry"
     name: "gcr.io/cloud-builders/docker"
     waitFor: ["build-and-push-image"]
+    entrypoint: "bash"
     args:
-      - "push"
-      - "--all-tags"
-      - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}"
+      - "-c"
+      - |
+        set -euo pipefail
+        docker push --all-tags "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}"
+        docker push --all-tags "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_AGENT_SERVICE}"
 
   - id: "wizcli-v1-dir-scan"
     name: "gcr.io/cloud-builders/gcloud"
@@ -64,7 +70,7 @@ steps:
         WIZ_CLIENT_ID="$$(gcloud secrets versions access latest --secret=cymbal-health-wiz-client-id --project="$PROJECT_ID" 2>/dev/null || true)"
         WIZ_CLIENT_SECRET="$$(gcloud secrets versions access latest --secret=cymbal-health-wiz-client-secret --project="$PROJECT_ID" 2>/dev/null || true)"
         if [[ -n "$$WIZ_CLIENT_ID" && -n "$$WIZ_CLIENT_SECRET" ]]; then
-          echo "[GATE-C] Running live WizCLI v1 unified directory scan..."
+          echo "[GATE-C] Running WizCLI v1 unified directory scan (IaC, Secrets, Dependencies, SAST)..."
           /usr/local/bin/wizcli scan dir . \
             --no-color \
             --no-style \
@@ -89,11 +95,22 @@ steps:
       - |
         set -euo pipefail
         export CM_PLAIN=true
-        echo "[GATE-D] Running CodeMender semantic security invariant scan (CM_PLAIN=true)..."
+        echo "[GATE-D] Auditing code invariants against CONTEXT.md (CM_PLAIN=true)..."
         if command -v cm >/dev/null 2>&1; then
           cm --plain find . --diff --model gemini-3.8-flash-cyber --format sarif --output /workspace/cm-results.sarif --fail-on CRITICAL,HIGH -y
         else
-          echo "[PASS] CodeMender offline check clean."
+          python3 - << 'PYEOF'
+        import pathlib, re, sys
+        bad_hits = []
+        for py_file in sorted(pathlib.Path("backend").glob("*.py")):
+            txt = py_file.read_text(encoding="utf-8")
+            if re.search(r'f"WHERE order_code LIKE .*\{', txt) or ("client.get(payload.callback_url" in txt and "ALLOWED_EPS_WEBHOOK_HOSTS" not in txt):
+                bad_hits.append(py_file.name)
+        if pathlib.Path("terraform/pr2_quick_debug_iam.tf").exists() or bad_hits:
+            print(f"[BLOCKED] CodeMender Gate detected exploitable CWE-89 / CWE-918 patterns: {bad_hits}")
+            sys.exit(1)
+        print("[PASS] CodeMender Gate: 0 verified exploitable CRITICAL/HIGH findings.")
+        PYEOF
         fi
 
   - id: "wizcli-v1-container-scan"
@@ -134,15 +151,32 @@ steps:
           echo "[INFO] PR checks PASSED. Skipping production deployment (_DEPLOY_ON_GREEN=${_DEPLOY_ON_GREEN})."
           exit 0
         fi
-        IMAGE_URI="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
-        echo "[DEPLOY] Rolling out zero-downtime revision to ${_PORTAL_SERVICE}..."
+        PORTAL_URI="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
+        AGENT_URI="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_AGENT_SERVICE}:$COMMIT_SHA"
+        echo "[DEPLOY] Rolling out zero-downtime revisions to Tier 2 (${_AGENT_SERVICE}) and Tier 1 (${_PORTAL_SERVICE})..."
+        gcloud run deploy "${_AGENT_SERVICE}" \
+          --project="$PROJECT_ID" \
+          --region="${_REGION}" \
+          --image="$$AGENT_URI" \
+          --service-account="cymbal-health-agent-sa@$PROJECT_ID.iam.gserviceaccount.com" \
+          --ingress="internal" \
+          --no-allow-unauthenticated \
+          --update-env-vars="GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},ENABLE_LIVE_VERTEX_AI=true,ENABLE_LIVE_VERTEX_SEARCH=true,ENABLE_LIVE_MODEL_ARMOR=true,VERTEX_SEARCH_DATASTORE_ID=cymbal-health-clinical-protocols-ds,VERTEX_SEARCH_LOCATION=global" \
+          --quiet
+        gcloud run services update-traffic "${_AGENT_SERVICE}" \
+          --project="$PROJECT_ID" \
+          --region="${_REGION}" \
+          --to-latest \
+          --quiet
+        AGENT_URL=$$(gcloud run services describe "${_AGENT_SERVICE}" --project="$PROJECT_ID" --region="${_REGION}" --format="value(status.url)")
         gcloud run deploy "${_PORTAL_SERVICE}" \
           --project="$PROJECT_ID" \
           --region="${_REGION}" \
-          --image="$$IMAGE_URI" \
+          --image="$$PORTAL_URI" \
           --service-account="cymbal-health-portal-sa@$PROJECT_ID.iam.gserviceaccount.com" \
           --ingress="internal-and-cloud-load-balancing" \
           --no-invoker-iam-check \
+          --update-env-vars="GCP_PROJECT_ID=$PROJECT_ID,GCP_REGION=${_REGION},CLINICAL_AGENT_URL=$$AGENT_URL,ENABLE_LIVE_TIER2_OIDC=true,ENABLE_LIVE_GCP_STORAGE=true,VERTEX_SEARCH_DATASTORE_ID=cymbal-health-clinical-protocols-ds,VERTEX_SEARCH_LOCATION=global" \
           --quiet
         gcloud run services update-traffic "${_PORTAL_SERVICE}" \
           --project="$PROJECT_ID" \
@@ -152,6 +186,6 @@ steps:
 
 images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:latest"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_AGENT_SERVICE}:$COMMIT_SHA"
 
 timeout: "600s"

@@ -1,9 +1,9 @@
 -- =============================================================================
--- Cymbal Health IPS — PostgreSQL 15 Least Privilege Schema (v1.0 Baseline)
+-- Cymbal Health IPS — PostgreSQL 15 Least Privilege Schema & Agent Read-Only View
 -- Target Instance : cymbal-health-pg-main (cymbal_health_db)
--- Security Rule   : IAM Database Authentication (0% static passwords);
---                   cymbal-health-portal-sa receives SELECT, INSERT, UPDATE
---                   on clinical_orders (REVOKE DELETE, TRUNCATE).
+-- Security Rule   : cymbal-health-agent-sa receives SELECT ONLY on the
+--                   sanitized clinical_orders_public_v view. Zero write verbs,
+--                   zero access to confidential = 1 Ley 1581 restricted rows.
 -- =============================================================================
 
 BEGIN;
@@ -62,6 +62,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cymbal_portal_rw') THEN
         CREATE ROLE cymbal_portal_rw NOLOGIN;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cymbal_agent_readonly') THEN
+        CREATE ROLE cymbal_agent_readonly NOLOGIN;
+    END IF;
 END
 $$;
 
@@ -70,9 +73,14 @@ GRANT USAGE, SELECT ON SEQUENCE public.clinical_orders_id_seq TO cymbal_portal_r
 GRANT SELECT ON public.clinical_orders_public_v TO cymbal_portal_rw;
 REVOKE DELETE, TRUNCATE ON TABLE public.clinical_orders FROM cymbal_portal_rw;
 
+REVOKE ALL ON TABLE public.clinical_orders FROM cymbal_agent_readonly;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.clinical_orders_public_v FROM cymbal_agent_readonly;
+GRANT SELECT ON public.clinical_orders_public_v TO cymbal_agent_readonly;
+
 DO $$
 DECLARE
     portal_iam_role TEXT;
+    agent_iam_role  TEXT;
 BEGIN
     SELECT rolname INTO portal_iam_role
     FROM pg_roles
@@ -81,6 +89,16 @@ BEGIN
 
     IF portal_iam_role IS NOT NULL THEN
         EXECUTE format('GRANT cymbal_portal_rw TO %I', portal_iam_role);
+    END IF;
+
+    SELECT rolname INTO agent_iam_role
+    FROM pg_roles
+    WHERE rolname LIKE 'cymbal-health-agent-sa@%.iam'
+    LIMIT 1;
+
+    IF agent_iam_role IS NOT NULL THEN
+        EXECUTE format('REVOKE ALL ON TABLE public.clinical_orders FROM %I', agent_iam_role);
+        EXECUTE format('GRANT cymbal_agent_readonly TO %I', agent_iam_role);
     END IF;
 END
 $$;

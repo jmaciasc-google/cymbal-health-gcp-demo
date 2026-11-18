@@ -11,9 +11,15 @@ variable "project_number" {
 }
 
 variable "region" {
-  description = "Primary GCP region for serverless compute and private data plane."
+  description = "Primary GCP region for serverless compute, private data, and AI guardrails."
   type        = string
   default     = "us-central1"
+}
+
+variable "discovery_engine_location" {
+  description = "Location for Vertex AI Search clinical protocols Data Store and Engine."
+  type        = string
+  default     = "global"
 }
 
 variable "environment" {
@@ -23,7 +29,19 @@ variable "environment" {
 }
 
 variable "portal_image" {
-  description = "Optional override container image URI for cymbal-health-web-portal."
+  description = "Optional override container image URI for Tier 1 cymbal-health-web-portal."
+  type        = string
+  default     = ""
+}
+
+variable "agent_image" {
+  description = "Optional override container image URI for Tier 2 cymbal-health-clinical-agent."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_image" {
+  description = "Optional override container image URI for Tier 2 cymbal-health-backlog-mcp."
   type        = string
   default     = ""
 }
@@ -64,8 +82,20 @@ variable "sql_deletion_protection" {
   default     = true
 }
 
+variable "mcp_authorized_invokers" {
+  description = "Explicit IAM members granted roles/run.invoker on cymbal-health-backlog-mcp."
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_github_triggers" {
   description = "Enable 2nd Gen Cloud Build GitHub triggers once OAuth host connection is linked."
+  type        = bool
+  default     = false
+}
+
+variable "manage_project_audit_configs" {
+  description = "Manage authoritative project-wide Data Access audit configs (enable on dedicated greenfield projects)."
   type        = bool
   default     = false
 }
@@ -83,6 +113,6 @@ variable "common_labels" {
     system           = "cymbal-health"
     managed_by       = "terraform"
     security_posture = "least-privilege"
-    release_track    = "v1-base"
+    release_track    = "v2-clinical-agent"
   }
 }

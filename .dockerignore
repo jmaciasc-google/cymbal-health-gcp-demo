@@ -14,7 +14,7 @@ artifacts/
 terraform/
 scripts/
 diagrams/
-docs/
+docs/drive-grounding/
 *.tfstate
 *.tfstate.*
 .terraform/

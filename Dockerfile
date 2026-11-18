@@ -2,7 +2,9 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8080
+    PORT=8080 \
+    ENFORCE_ZERO_STATIC_KEYS=true \
+    CM_PLAIN=true
 
 RUN groupadd --gid 10001 appuser && \
     useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin appuser
@@ -15,6 +17,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY backend /app/backend
 COPY frontend /app/frontend
+COPY docs/clinical-protocols /app/docs/clinical-protocols
 COPY CONTEXT.md /app/CONTEXT.md
 
 RUN chown -R 10001:10001 /app
