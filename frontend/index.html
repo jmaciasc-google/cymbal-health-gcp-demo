@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cymbal Health | Autorizaciones Clinicas</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="4"></rect>
+          <line x1="12" y1="8" x2="12" y2="16"></line>
+          <line x1="8" y1="12" x2="16" y2="12"></line>
+        </svg>
+      </span>
+      <span class="brand-title">Cymbal Health</span>
+      <span class="brand-divider" aria-hidden="true"></span>
+      <span class="brand-subtitle">Autorizaciones Clinicas</span>
+    </div>
+
+    <div class="topbar-actions">
+      <span class="network-pill">
+        <span class="dot dot-online" aria-hidden="true"></span>
+        <span>Red IPS Nacional</span>
+      </span>
+
+      <button type="button" class="btn btn-primary" id="btn-open-new-order">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>Nueva orden</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="kpi-grid" aria-label="Indicadores clinicos">
+      <article class="kpi-card">
+        <span class="kpi-label">Ordenes activas</span>
+        <strong class="kpi-value" id="kpi-active">5</strong>
+        <span class="kpi-meta">Consulta externa e IPS</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Autorizadas vigentes</span>
+        <strong class="kpi-value kpi-accent-green" id="kpi-authorized">3</strong>
+        <span class="kpi-meta">Firma medica validada</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Pendientes revision</span>
+        <strong class="kpi-value kpi-accent-amber" id="kpi-pending">2</strong>
+        <span class="kpi-meta">Auditoria pertinencia</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Cobertura regional</span>
+        <strong class="kpi-value kpi-accent-blue" id="kpi-centers">4 sedes</strong>
+        <span class="kpi-meta">Red diagnostica activa</span>
+      </article>
+    </section>
+
+    <section class="panel-card">
+      <div class="toolbar">
+        <form class="search-box" id="form-search" autocomplete="off">
+          <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="20" y1="20" x2="16.2" y2="16.2"></line>
+          </svg>
+          <input
+            type="search"
+            id="input-search"
+            placeholder="Buscar orden, codigo CUPS, especialidad o sede"
+            aria-label="Buscar autorizaciones clinicas"
+          />
+          <button type="submit" class="btn btn-subtle">Buscar</button>
+        </form>
+
+        <div class="filter-pills" role="group" aria-label="Estado de autorizacion">
+          <button type="button" class="pill-filter active" data-status-filter="ALL">Todas</button>
+          <button type="button" class="pill-filter" data-status-filter="AUTORIZADA">Autorizadas</button>
+          <button type="button" class="pill-filter" data-status-filter="PENDIENTE_FIRMA">Pendientes</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th>Orden</th>
+              <th>Paciente / EAPB</th>
+              <th>CUPS</th>
+              <th>Procedimiento</th>
+              <th>Especialidad</th>
+              <th>Sede</th>
+              <th>Estado</th>
+              <th class="col-right">Soporte</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL 1: Nueva Autorizacion Clinica (Pre-diligenciada con datos sinteticos realistas) -->
+  <div class="modal-backdrop" id="modal-new-order" role="dialog" aria-modal="true" aria-labelledby="title-new-order" hidden>
+    <div class="modal-dialog modal-md">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+          </span>
+          <h2 id="title-new-order">Emitir autorizacion clinica</h2>
+        </div>
+        <button type="button" class="btn-icon-close" data-close-modal="modal-new-order" aria-label="Cerrar ventana">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <form id="form-create-order" class="modal-body form-grid">
+        <label class="field">
+          <span>Paciente afiliado</span>
+          <input type="text" name="patient_alias" required value="P. Cardenas Montoya" maxlength="80" />
+        </label>
+        <label class="field">
+          <span>Documento identidad</span>
+          <input type="text" name="document_masked" required value="1032489120" maxlength="32" />
+        </label>
+        <label class="field">
+          <span>Asegurador (EAPB)</span>
+          <input type="text" name="eps_name" required value="EPS Sanitas - Contributivo" maxlength="80" />
+        </label>
+        <label class="field">
+          <span>Sede prestadora</span>
+          <select name="center_city">
+            <option value="Bogota" selected>Bogota</option>
+            <option value="Pereira">Pereira</option>
+            <option value="Medellin">Medellin</option>
+            <option value="Cali">Cali</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Codigo CUPS</span>
+          <input type="text" name="cups_code" required value="895001" maxlength="12" />
+        </label>
+        <label class="field">
+          <span>Especialidad</span>
+          <input type="text" name="specialty" required value="Cardiologia Clinica" maxlength="60" />
+        </label>
+        <label class="field field-span-2">
+          <span>Procedimiento / Tecnologia en salud</span>
+          <input type="text" name="procedure_name" required value="Monitoreo Electrocardiografico Continuo Holter 24 Horas" maxlength="140" />
+        </label>
+        <label class="field">
+          <span>Diagnostico CIE-10</span>
+          <input type="text" name="cie10_code" required value="I499 - Arritmia cardiaca en estudio" maxlength="90" />
+        </label>
+        <label class="field">
+          <span>Prioridad clinica</span>
+          <select name="priority">
+            <option value="ALTA" selected>ALTA</option>
+            <option value="MEDIA">MEDIA</option>
+            <option value="BAJA">BAJA</option>
+          </select>
+        </label>
+        <label class="field field-span-2">
+          <span>Medico tratante y Registro Medico</span>
+          <input type="text" name="attending_physician" required value="Dra. Natalia Gomez Arango (RM 110492810)" maxlength="90" />
+        </label>
+        <label class="field field-span-2">
+          <span>Resumen de historia clinica y pertinencia</span>
+          <textarea name="clinical_summary" rows="3" required maxlength="420">Episodios recurrentes de palpitaciones rapidas y presincope documentados en consulta especializada. ECG de reposo sin bloqueo AV agudo; se ordena registro ambulatorio continuo de 24 horas para estratificacion arritmica.</textarea>
+        </label>
+        <div class="modal-footer field-span-2">
+          <button type="button" class="btn btn-ghost" data-close-modal="modal-new-order">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-order">Emitir autorizacion</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Detalle de Orden y Autorizacion Medica PDF -->
+  <div class="modal-backdrop" id="modal-order-detail" role="dialog" aria-modal="true" aria-labelledby="title-order-detail" hidden>
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"></path>
+            </svg>
+          </span>
+          <h2 id="title-order-detail">Autorizacion medica</h2>
+        </div>
+        <button type="button" class="btn-icon-close" data-close-modal="modal-order-detail" aria-label="Cerrar ventana">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-meta-grid" id="detail-meta-grid"></div>
+        <div class="pdf-preview-box">
+          <div class="pdf-preview-bar">
+            <span id="detail-folio-label">Soporte oficial de ordenamiento medico</span>
+            <div class="pdf-actions">
+              <a class="btn btn-secondary" id="link-download-pdf" href="#" target="_blank" rel="noopener">Abrir PDF completo</a>
+            </div>
+          </div>
+          <iframe id="iframe-pdf-preview" class="pdf-frame" title="Orden medica autorizada PDF"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

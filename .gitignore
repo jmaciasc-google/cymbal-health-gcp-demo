@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*
+*.key
+*credentials*.json
+artifacts/*.sarif
+artifacts/*.html
+artifacts/*.json
+*.tfstate
+*.tfstate.*
+.terraform/

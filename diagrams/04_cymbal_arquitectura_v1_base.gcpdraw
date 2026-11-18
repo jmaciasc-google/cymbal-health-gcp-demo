@@ -1,0 +1,106 @@
+# Cymbal Health v1.0 (Rama main): Arquitectura Base Productiva Serverless y Minimo Privilegio
+# Portal clinico puro sin componentes de IA: ordenes CUPS/CIE-10 y soportes PDF estructurados privados.
+
+meta {
+  title "Cymbal Health v1.0 (Base en Produccion): Arquitectura Serverless N-Tier sin Agente IA"
+}
+
+elements {
+  card laptop_and_phone as usuarios_ips {
+    name "Medicos y Afiliados"
+    display_name "Cliente HTTPS TLS 1.3"
+    description "Portal Autorizaciones"
+  }
+
+  gcp {
+    group zona_waf_v1 {
+      name "Frontera 1: Perimetro Global"
+      background_color "#E8F0FE"
+
+      card load_balancer as alb_v1 {
+        name "External App LB"
+        display_name "IP Global + SSL"
+        description "Serverless NEG Interno"
+      }
+      card armor as waf_v1 {
+        name "Cloud Armor WAF"
+        display_name "Reglas OWASP v33"
+        description "SQLi, XSS, RCE y Rate"
+      }
+    }
+
+    group zona_portal_v1 {
+      name "Frontera 2: Tier 1 Portal v1.0"
+      background_color "#E6F4EA"
+
+      stacked_card run as portal_v1 {
+        name "cymbal-health-web-portal"
+        display_name "Cloud Run v1.0 (UID 10001)"
+        description "INGRESS_INTERNAL_LB"
+      }
+      card iam as sa_portal_v1 {
+        name "cymbal-health-portal-sa"
+        display_name "SA Dedicada Tier 1"
+        description "0% Llaves Estaticas"
+      }
+    }
+
+    group zona_datos_v1 {
+      name "Frontera 3: Red Privada y Datos Clinicos"
+      background_color "#FEF7E0"
+
+      card vpc as vpc_v1 {
+        name "VPC Privada + PSA"
+        display_name "Subnet 10.28.0.0/24"
+        description "Direct VPC Egress"
+      }
+      card sql as sql_v1 {
+        name "Cloud SQL PostgreSQL 15"
+        display_name "IP Privada + IAM DB Auth"
+        description "Ordenes CUPS y CIE-10"
+      }
+      card storage as gcs_v1 {
+        name "Bucket Soportes PDF"
+        display_name "PDFs Hospitalarios"
+        description "UBLA + Public Blocked"
+      }
+    }
+
+    group zona_ops_v1 {
+      name "Frontera 4: CI/CD y Observabilidad"
+      background_color "#F3E8FD"
+
+      card build as cicd_v1 {
+        name "Cloud Build + Registry"
+        display_name "SA Dedicada CI/CD"
+        description "Imagenes No-Root"
+      }
+      card logging as logs_v1 {
+        name "Cloud Audit Logs"
+        display_name "Logging y Monitoring"
+        description "Trazabilidad y CUDs"
+      }
+    }
+  }
+}
+
+paths {
+  # Entrada HTTPS al perimetro global
+  usuarios_ips -right-> alb_v1 : "HTTPS"
+  alb_v1 -down-> waf_v1
+
+  # Perimetro hacia Portal v1.0 en Cloud Run
+  waf_v1 -right-> portal_v1
+  portal_v1 .down.> sa_portal_v1
+
+  # Acceso privado hacia VPC, Cloud SQL y Cloud Storage
+  portal_v1 -right-> vpc_v1
+  vpc_v1 -down-> sql_v1
+  sql_v1 (-down->) gcs_v1
+  sa_portal_v1 .right.> gcs_v1
+
+  # Despliegue y telemetria hacia plano de operaciones
+  vpc_v1 .right.> cicd_v1
+  sql_v1 .right.> logs_v1
+  cicd_v1 (-down->) logs_v1
+}
