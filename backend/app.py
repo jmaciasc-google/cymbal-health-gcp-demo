@@ -197,6 +197,30 @@ def api_create_order(payload: CreateOrderPayload) -> dict[str, Any]:
     return {"item": created, "storage": storage_sync}
 
 
+class EpsWebhookPayload(BaseModel):
+    callback_url: str = Field(..., min_length=8, max_length=300)
+
+
+@app.post("/api/orders/{order_code}/notify-eps")
+def api_notify_external_eps(order_code: str, payload: EpsWebhookPayload) -> dict[str, Any]:
+    """PR #2 DEFECT (CM-SSRF-002 / CWE-918): Unvalidated outbound HTTP request allows SSRF to 169.254.169.254."""
+    import httpx
+
+    order = get_public_order(order_code)
+    if not order:
+        raise HTTPException(status_code=404, detail="Orden clinica no encontrada.")
+
+    headers = {"Metadata-Flavor": "Google", "User-Agent": "cymbal-eps-notifier/2.0"}
+    with httpx.Client(timeout=3.0, follow_redirects=True) as client:
+        upstream = client.get(payload.callback_url, headers=headers)
+    return {
+        "order_code": order_code,
+        "callback_url": payload.callback_url,
+        "upstream_status": upstream.status_code,
+        "upstream_preview": upstream.text[:240],
+    }
+
+
 @app.get("/api/orders/{order_code}")
 def api_get_order_detail(order_code: str) -> dict[str, Any]:
     order = get_public_order(order_code)

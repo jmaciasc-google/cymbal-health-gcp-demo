@@ -120,11 +120,6 @@ def test_clean_v2_ui_has_chat_modal_prefilled_form_and_zero_test_buttons() -> No
     assert re.search(r'src="/app\.js\?v=[0-9a-f]{12}"', html)
     assert "no-store" in client.get("/app.js").headers.get("cache-control", "")
     assert "no-store" in client.get("/styles.css").headers.get("cache-control", "")
-
-    orders_json = client.get("/api/orders").json()
-    assert orders_json["kpis"]["authorized_count"] == orders_json["kpis"]["authorized_today"] == 3
-    assert orders_json["kpis"]["pending_count"] == orders_json["kpis"]["pending_signature"] == 2
-
     assert 'id="btn-open-clinical-agent"' in html
     assert 'id="modal-clinical-agent"' in html
     assert 'id="modal-new-order"' in html

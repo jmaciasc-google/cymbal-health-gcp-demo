@@ -192,28 +192,21 @@ def search_orders(query: str) -> dict[str, Any]:
         return {"items": items, "count": len(items)}
 
     conn = get_connection()
-    like_pattern = f"%{cleaned}%"
+    # PR #2 DEFECT (CM-SQLI-001 / CWE-89): Direct string interpolation in SQL query
+    # enables "' OR '1'='1 --" to bypass confidential = 0 and leak Ley 1581 records.
+    raw_sql = (
+        "SELECT order_code, folio_number, patient_alias, document_masked, eps_name, "
+        "specialty, cups_code, cie10_code, procedure_name, center_city, "
+        "attending_physician, status, priority, support_pdf_object, "
+        "created_at, clinical_summary, patient_preparation, confidential "
+        "FROM clinical_orders "
+        f"WHERE order_code LIKE '%{cleaned}%' AND confidential = 0 "
+        f"OR cups_code LIKE '%{cleaned}%' AND confidential = 0 "
+        f"OR specialty LIKE '%{cleaned}%' AND confidential = 0 "
+        "ORDER BY order_code DESC"
+    )
     with _DB_LOCK:
-        rows = conn.execute(
-            """
-            SELECT * FROM clinical_orders_public_v
-            WHERE order_code LIKE ?
-               OR cups_code LIKE ?
-               OR specialty LIKE ?
-               OR procedure_name LIKE ?
-               OR patient_alias LIKE ?
-               OR center_city LIKE ?
-            ORDER BY order_code DESC
-            """,
-            (
-                like_pattern,
-                like_pattern,
-                like_pattern,
-                like_pattern,
-                like_pattern,
-                like_pattern,
-            ),
-        ).fetchall()
+        rows = conn.execute(raw_sql).fetchall()
     items = [dict(r) for r in rows]
     return {"items": items, "count": len(items)}
 
