@@ -197,27 +197,86 @@ def api_create_order(payload: CreateOrderPayload) -> dict[str, Any]:
     return {"item": created, "storage": storage_sync}
 
 
+ALLOWED_EPS_WEBHOOK_HOSTS = frozenset(
+    {
+        "autorizaciones.eps-sanitas.co",
+        "interoperabilidad.sura.co",
+        "radicacion.compensar.co",
+    }
+)
+
+
 class EpsWebhookPayload(BaseModel):
     callback_url: str = Field(..., min_length=8, max_length=300)
+    dry_run: bool = True
+
+
+def validate_safe_eps_webhook_url(raw_url: str) -> str:
+    """Remediation for CM-SSRF-002 (CWE-918): HTTPS-only, strict EAPB host allowlist, zero internal/metadata IPs."""
+    import ipaddress
+    from urllib.parse import urlparse
+
+    parsed = urlparse((raw_url or "").strip())
+    if parsed.scheme != "https":
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se permiten callbacks con esquema HTTPS estricto.",
+        )
+    host = (parsed.hostname or "").lower().strip()
+    if not host or host in {"localhost", "metadata.google.internal", "169.254.169.254"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Destino bloqueado por politica anti-SSRF (metadatos / host local).",
+        )
+    try:
+        ip_obj = ipaddress.ip_address(host)
+        if (
+            ip_obj.is_private
+            or ip_obj.is_loopback
+            or ip_obj.is_link_local
+            or ip_obj.is_reserved
+            or ip_obj.is_multicast
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Direcciones IP privadas o link-local estan prohibidas.",
+            )
+    except ValueError:
+        pass
+
+    if host not in ALLOWED_EPS_WEBHOOK_HOSTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dominio EAPB no autorizado en lista blanca: {host}",
+        )
+    return raw_url.strip()
 
 
 @app.post("/api/orders/{order_code}/notify-eps")
 def api_notify_external_eps(order_code: str, payload: EpsWebhookPayload) -> dict[str, Any]:
-    """PR #2 DEFECT (CM-SSRF-002 / CWE-918): Unvalidated outbound HTTP request allows SSRF to 169.254.169.254."""
     import httpx
 
+    safe_url = validate_safe_eps_webhook_url(payload.callback_url)
     order = get_public_order(order_code)
     if not order:
         raise HTTPException(status_code=404, detail="Orden clinica no encontrada.")
 
-    headers = {"Metadata-Flavor": "Google", "User-Agent": "cymbal-eps-notifier/2.0"}
-    with httpx.Client(timeout=3.0, follow_redirects=True) as client:
-        upstream = client.get(payload.callback_url, headers=headers)
+    if payload.dry_run:
+        return {
+            "order_code": order_code,
+            "callback_url": safe_url,
+            "status": "VALIDATED_ALLOWLIST_HTTPS",
+        }
+
+    with httpx.Client(timeout=4.0, follow_redirects=False) as client:
+        upstream = client.post(
+            safe_url,
+            json={"order_code": order["order_code"], "folio": order["folio_number"], "status": order["status"]},
+        )
     return {
         "order_code": order_code,
-        "callback_url": payload.callback_url,
+        "callback_url": safe_url,
         "upstream_status": upstream.status_code,
-        "upstream_preview": upstream.text[:240],
     }
 
 

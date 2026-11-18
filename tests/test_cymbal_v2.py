@@ -394,3 +394,38 @@ def test_github_backlog_mcp_server_tools() -> None:
     assert pr2_vuln["blocking_findings_count"] == 4
     ids = {f["id"] for f in pr2_vuln["findings"]}
     assert ids == {"WIZ-IAC-IAM-001", "AR-CVE-2024-26130", "CM-SQLI-001", "CM-SSRF-002"}
+
+
+def test_pr2_remediated_blocks_sqli_cwe89_and_ssrf_cwe918() -> None:
+    client = TestClient(app)
+
+    # CWE-89 SQL injection blocked via parameterized query on clinical_orders_public_v
+    sqli_resp = client.get("/api/orders/search", params={"q": "' OR '1'='1 --"})
+    assert sqli_resp.status_code == 200
+    assert sqli_resp.json()["count"] == 0
+
+    # CWE-918 SSRF geometric blocked with HTTP 400
+    ssrf_vectors = [
+        "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token",
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "https://169.254.169.254/latest/meta-data/",
+        "https://127.0.0.1:8080/healthz",
+        "https://untrusted-external.example.org/webhook",
+    ]
+    for bad_url in ssrf_vectors:
+        bad_resp = client.post(
+            "/api/orders/ORD-2026-1041/notify-eps",
+            json={"callback_url": bad_url, "dry_run": True},
+        )
+        assert bad_resp.status_code == 400
+
+    # Allowlisted HTTPS EAPB endpoint succeeds
+    ok_resp = client.post(
+        "/api/orders/ORD-2026-1041/notify-eps",
+        json={
+            "callback_url": "https://autorizaciones.eps-sanitas.co/v1/notificaciones",
+            "dry_run": True,
+        },
+    )
+    assert ok_resp.status_code == 200
+    assert ok_resp.json()["status"] == "VALIDATED_ALLOWLIST_HTTPS"
