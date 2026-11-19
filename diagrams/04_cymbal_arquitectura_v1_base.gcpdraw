@@ -9,7 +9,6 @@ elements {
   card laptop_and_phone as usuarios_ips {
     name "Medicos y Afiliados"
     display_name "Cliente HTTPS TLS 1.3"
-    description "Portal Autorizaciones"
   }
 
   gcp {
@@ -20,12 +19,10 @@ elements {
       card load_balancer as alb_v1 {
         name "External App LB"
         display_name "IP Global + SSL"
-        description "Serverless NEG Interno"
       }
       card armor as waf_v1 {
         name "Cloud Armor WAF"
         display_name "Reglas OWASP v33"
-        description "SQLi, XSS, RCE y Rate"
       }
     }
 
@@ -36,12 +33,10 @@ elements {
       stacked_card run as portal_v1 {
         name "cymbal-health-web-portal"
         display_name "Cloud Run v1.0 (UID 10001)"
-        description "INGRESS_INTERNAL_LB"
       }
       card iam as sa_portal_v1 {
         name "cymbal-health-portal-sa"
         display_name "SA Dedicada Tier 1"
-        description "0% Llaves Estaticas"
       }
     }
 
@@ -52,17 +47,14 @@ elements {
       card vpc as vpc_v1 {
         name "VPC Privada + PSA"
         display_name "Subnet 10.28.0.0/24"
-        description "Direct VPC Egress"
       }
       card sql as sql_v1 {
         name "Cloud SQL PostgreSQL 15"
         display_name "IP Privada + IAM DB Auth"
-        description "Ordenes CUPS y CIE-10"
       }
       card storage as gcs_v1 {
         name "Bucket Soportes PDF"
         display_name "PDFs Hospitalarios"
-        description "UBLA + Public Blocked"
       }
     }
 
@@ -73,12 +65,10 @@ elements {
       card build as cicd_v1 {
         name "Cloud Build + Registry"
         display_name "SA Dedicada CI/CD"
-        description "Imagenes No-Root"
       }
       card logging as logs_v1 {
         name "Cloud Audit Logs"
         display_name "Logging y Monitoring"
-        description "Trazabilidad y CUDs"
       }
     }
   }

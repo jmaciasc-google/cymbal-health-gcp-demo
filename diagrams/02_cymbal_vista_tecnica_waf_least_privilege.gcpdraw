@@ -9,7 +9,6 @@ elements {
   card laptop_and_phone as cliente_medico {
     name "Personal Clinico"
     display_name "Navegador HTTPS"
-    description "TLS 1.3 Externo"
   }
 
   gcp {
@@ -20,12 +19,10 @@ elements {
       card load_balancer as ext_alb {
         name "External App LB"
         display_name "IP Global + SSL"
-        description "Serverless NEG Interno"
       }
       card armor as armor_waf {
         name "Cloud Armor WAF"
         display_name "OWASP v33 Stable"
-        description "SQLi, XSS, RCE, Rate"
       }
     }
 
@@ -36,12 +33,10 @@ elements {
       stacked_card run as run_portal {
         name "cymbal-health-web-portal"
         display_name "Cloud Run (UID 10001)"
-        description "INGRESS_INTERNAL_LB"
       }
       card iam as sa_portal {
         name "cymbal-health-portal-sa"
         display_name "SA Dedicada Tier 1"
-        description "run.invoker + GCS RW"
       }
     }
 
@@ -52,22 +47,18 @@ elements {
       stacked_card run as run_agent {
         name "cymbal-health-clinical-agent"
         display_name "Cloud Run ADK (UID 10001)"
-        description "INGRESS_INTERNAL_ONLY"
       }
       card iam as sa_agent {
         name "cymbal-health-agent-sa"
         display_name "SA Dedicada Tier 2"
-        description "ADC: Vertex, Armor, DLP"
       }
       card run as run_mcp {
         name "cymbal-health-backlog-mcp"
         display_name "Cloud Run MCP (UID 10001)"
-        description "INGRESS_INTERNAL_ONLY"
       }
       card iam as sa_mcp {
         name "cymbal-health-mcp-sa"
         display_name "SA Dedicada MCP"
-        description "Solo secreto github-pat"
       }
     }
 
@@ -78,27 +69,22 @@ elements {
       card data_loss_prevention as inline_guardrails {
         name "Model Armor + DLP"
         display_name "Filtro Inline <30ms"
-        description "Prompt y CC Ley 1581"
       }
       card vertex_ai as vertex_adc {
         name "Vertex AI Gemini"
         display_name "Keyless ADC"
-        description "0% API Keys Estaticas"
       }
       card sql as sql_iam {
         name "Cloud SQL PostgreSQL 15"
         display_name "IP Privada PSA + IAM Auth"
-        description "Agente: Rol SELECT-Only"
       }
       card storage as gcs_ubla {
         name "Bucket Soportes PDF"
         display_name "UBLA + Public Blocked"
-        description "Portal RW / Agente RO"
       }
       card secret_manager as sec_mgr {
         name "Secret Manager"
         display_name "Resource-Level IAM"
-        description "Aislamiento por Secreto"
       }
     }
 
@@ -109,17 +95,14 @@ elements {
       card logging as audit_sink {
         name "Cloud Audit Logs"
         display_name "Admin + Data Access"
-        description "Sink Writer SA Dedicada"
       }
       card pubsub as pubsub_audit {
         name "Pub/Sub Audit Topic"
         display_name "Stream Eventos IAM"
-        description "roles/pubsub.publisher"
       }
       card asset_inventory as wiz_secops {
         name "Wiz Cloud + SecOps"
         display_name "Attack Path y SIEM"
-        description "Org Policies Preventivas"
       }
     }
   }
