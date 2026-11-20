@@ -1,0 +1,216 @@
+# Cymbal Health + Gemini Enterprise y Cloud Security
+
+meta {
+  title "Cymbal Health + Gemini Enterprise y Cloud Security"
+}
+
+elements {
+  group linktic_team {
+    name "Equipo Linktic"
+    background_color "#F8F9FA"
+
+    card users as admin_linktic {
+      name "Usuarios Internos"
+      display_name "Areas de Negocio"
+    }
+
+    card users as dev_linktic {
+      name "Developers"
+      display_name "Ingenieria"
+    }
+  }
+
+  group third_party_scm {
+    name "Codigo Fuente"
+    background_color "#F8F9FA"
+
+    card git as github_repo {
+      name "GitHub"
+      display_name "Repositorios Git"
+      icon_url "https://drive.google.com/file/d/1Cvbpe0927e_cCyfKIvfvlwZmvcd5Kngn/view"
+    }
+  }
+
+  group external_clients {
+    name "Acceso Publico"
+    background_color "#F8F9FA"
+
+    card laptop_and_phone as usuarios_v1 {
+      name "Usuarios Externos"
+      display_name "Navegador"
+    }
+  }
+
+  gcp {
+    group ideacion_codigo {
+      name "Herramientas de IA Interna"
+      background_color "#E8F0FE"
+
+      card vertex_ai as gemini_ent {
+        name "Gemini Enterprise"
+        display_name "Contexto Empresarial"
+      }
+      card laptop as agy_pc {
+        name "Antigravity"
+        display_name "Subscripcion de GE"
+      }
+    }
+
+    group cicd_gate {
+      name "CI/CD y Seguridad"
+      background_color "#FEF7E0"
+
+      card build as cloud_build {
+        name "Cloud Build"
+        display_name "Pipeline CI/CD"
+      }
+      card security_command_center as wiz_code {
+        name "Wiz Code"
+        display_name "Seguridad CI/CD"
+      }
+      card ai_platform as codemender {
+        name "CodeMender"
+        display_name "Sandbox AppSec IA"
+      }
+      card artifact_registry as art_reg {
+        name "Artifact Registry"
+        display_name "Contenedores"
+      }
+    }
+
+    group perimetro_v1 {
+      name "Perimetro Global"
+      background_color "#E8F0FE"
+
+      card load_balancer as lb_v1 {
+        name "Load Balancer"
+        display_name "HTTPS Global"
+      }
+      card armor as waf_v1 {
+        name "Cloud Armor"
+        display_name "WAF OWASP"
+      }
+    }
+
+    card gmail as gmail_ws {
+      name "Gmail"
+      display_name "Correos"
+    }
+
+    card drive as drive_ws {
+      name "Google Drive"
+      display_name "Documentos"
+    }
+
+    group app_v1 {
+      name "Aplicacion"
+      background_color "#E6F4EA"
+
+      stacked_card run as portal_v1 {
+        name "Web Portal"
+        display_name "Cloud Run"
+      }
+      card iam as sa_portal_v1 {
+        name "Service Account"
+        display_name "Least Privilege"
+      }
+    }
+
+    group datos_v1 {
+      name "Red y Datos Privados"
+      background_color "#FEF7E0"
+
+      card vpc as vpc_v1 {
+        name "Private VPC"
+        display_name "Red Aislada"
+      }
+      card sql as db_v1 {
+        name "Orders DB"
+        display_name "Cloud SQL PostgreSQL"
+      }
+      card storage as pdf_v1 {
+        name "PDF Storage"
+        display_name "Cloud Storage"
+      }
+    }
+
+    group ops_v1 {
+      name "Monitoreo"
+      background_color "#F3E8FD"
+
+      card logging as logs_v1 {
+        name "Audit Logs"
+        display_name "Cloud Logging"
+      }
+    }
+
+    group obs_sec {
+      name "Observabilidad y Seguridad"
+      background_color "#FCE8E6"
+
+      card security_command_center as google_secops {
+        name "Google SecOps"
+        display_name "SIEM y SOAR"
+      }
+      card asset_inventory as wiz_cloud {
+        name "Wiz"
+        display_name "Wiz Cloud + Defend"
+      }
+    }
+
+    card apis_services as gcp_api {
+      name "Google Cloud API"
+      display_name "Inventario y Control"
+    }
+  }
+}
+
+paths {
+  admin_linktic -right-> gemini_ent
+  dev_linktic .right.> gemini_ent
+  dev_linktic -right-> agy_pc
+  github_repo <-right- agy_pc
+  github_repo -right-> cloud_build
+
+  cloud_build -down-> wiz_code
+  cloud_build (-right->) art_reg
+  wiz_code -right-> codemender
+  codemender -up-> art_reg
+
+  usuarios_v1 -right-> lb_v1 : "HTTPS"
+  lb_v1 -down-> waf_v1
+
+  gemini_ent <-right- gmail_ws
+  gemini_ent <-right- drive_ws
+
+  art_reg -right-> portal_v1
+  waf_v1 -up-> portal_v1
+  portal_v1 .down.> sa_portal_v1
+
+  portal_v1 -right-> vpc_v1
+  vpc_v1 -down-> db_v1
+  sa_portal_v1 .right.> pdf_v1
+  db_v1 -right-> logs_v1
+  pdf_v1 -right-> logs_v1
+
+  logs_v1 -right-> google_secops
+  logs_v1 -right-> wiz_cloud
+
+  wiz_cloud <-down- gcp_api
+  google_secops <.down. gcp_api
+
+  admin_linktic (-down->) dev_linktic
+  dev_linktic (-down->) github_repo
+  github_repo (-down->) usuarios_v1
+
+  gemini_ent (-down->) agy_pc
+  agy_pc (-down->) cloud_build
+  wiz_code (-down->) lb_v1
+
+  gmail_ws (-down->) drive_ws
+  drive_ws (-down->) portal_v1
+
+  db_v1 (-down->) pdf_v1
+  google_secops (-down->) wiz_cloud
+  wiz_cloud (-down->) gcp_api
+}

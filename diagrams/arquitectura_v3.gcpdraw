@@ -1,113 +1,165 @@
-# Cymbal Health v3: Arquitectura Final con Agente IA Seguro
+# Cymbal Health v3: Arquitectura Web + Agente IA Seguro
 
 meta {
-  title "Cymbal Health v3: Portal Web + Agente Clinico IA Seguro"
+  title "Cymbal Health Arquitectura v3: Web + Agente IA Seguro"
 }
 
 elements {
   card laptop_and_phone as usuarios_v3 {
-    name "Personal Medico"
-    display_name "Portal + Asistente IA"
+    name "Usuarios"
+    display_name "Navegador HTTPS"
   }
 
   gcp {
     group perimetro_v3 {
-      name "Perimetro y Web v3"
+      name "Perimetro Global"
       background_color "#E8F0FE"
 
+      card load_balancer as lb_v3 {
+        name "Load Balancer"
+        display_name "HTTPS Global"
+      }
       card armor as waf_v3 {
-        name "Load Balancer + WAF"
-        display_name "HTTPS + Cloud Armor"
-      }
-      stacked_card run as portal_v3 {
-        name "Web Portal v3"
-        display_name "Cloud Run"
-      }
-      card iam as sa_portal_v3 {
-        name "Portal Identity"
-        display_name "Service Account"
+        name "Cloud Armor"
+        display_name "WAF OWASP"
       }
     }
 
-    group agente_v3 {
-      name "Capa Agente Interno"
+    group app_v3 {
+      name "Aplicacion"
       background_color "#E6F4EA"
 
+      stacked_card run as portal_v3 {
+        name "Web Portal"
+        display_name "Cloud Run"
+      }
+      card iam as sa_portal_v3 {
+        name "Service Account"
+        display_name "Least Privilege"
+      }
+    }
+
+    group datos_v3 {
+      name "Red y Datos Privados"
+      background_color "#FEF7E0"
+
+      card vpc as vpc_v3 {
+        name "Private VPC"
+        display_name "Red Aislada"
+      }
+      card sql as db_v3 {
+        name "Orders DB"
+        display_name "Cloud SQL PostgreSQL"
+      }
+      card storage as pdf_v3 {
+        name "PDF Storage"
+        display_name "Cloud Storage"
+      }
+    }
+
+    group agent_layer_v3 {
+      name "Agente IA Interno"
+      background_color "#E8F0FE"
+
       stacked_card run as agent_v3 {
-        name "Clinical Agent v3"
+        name "Clinical Agent"
         display_name "Cloud Run + ADK"
       }
       card iam as sa_agent_v3 {
         name "Agent Identity"
-        display_name "Service Account"
+        display_name "Least Privilege"
+      }
+      card ai_hub as registry_v3 {
+        name "Agent Registry"
+        display_name "Catalogo IA"
       }
     }
 
-    group ia_datos_v3 {
-      name "Seguridad IA y Datos"
+    group ai_security_v3 {
+      name "Seguridad IA y Conocimiento"
       background_color "#FEF7E0"
 
       card data_loss_prevention as guardrails_v3 {
         name "Model Armor + DLP"
-        display_name "Guardrails IA"
-      }
-      card ai_platform as search_v3 {
-        name "Protocols Search"
-        display_name "Vertex AI Search"
+        display_name "Anti-Injection y PII"
       }
       card vertex_ai as gemini_v3 {
         name "Gemini Model"
         display_name "Vertex AI"
       }
-      card sql as db_v3 {
-        name "Orders DB"
-        display_name "Cloud SQL Read-Only"
-      }
-      card storage as buckets_v3 {
-        name "Private Storage"
-        display_name "PDFs y Protocolos"
+      card ai_platform as search_v3 {
+        name "Protocols Search"
+        display_name "Vertex AI Search"
       }
     }
 
-    group gov_v3 {
-      name "Gobernanza y SecOps"
+    group ops_v3 {
+      name "Monitoreo"
       background_color "#F3E8FD"
 
-      card ai_hub as registry_v3 {
-        name "Agent Registry"
-        display_name "Catalogo IA"
-      }
       card logging as logs_v3 {
         name "Audit Logs"
         display_name "Cloud Logging"
       }
+    }
+
+    group obs_sec_v3 {
+      name "Observabilidad y Seguridad"
+      background_color "#FCE8E6"
+
       card security_command_center as secops_v3 {
-        name "SecOps + Wiz"
-        display_name "SIEM y CNAPP"
+        name "Google SecOps"
+        display_name "SIEM y SOAR"
       }
+      card asset_inventory as wiz_v3 {
+        name "Wiz"
+        display_name "Wiz Cloud + Defend"
+      }
+    }
+
+    card apis_services as gcp_api_v3 {
+      name "Google Cloud API"
+      display_name "Inventario y Control"
     }
   }
 }
 
 paths {
-  usuarios_v3 -right-> waf_v3 : "HTTPS"
-  waf_v3 -down-> portal_v3
+  # 1. Perimetro -> Aplicacion (identico a v1!)
+  usuarios_v3 -right-> lb_v3 : "HTTPS"
+  lb_v3 -down-> waf_v3
+  waf_v3 -right-> portal_v3
   portal_v3 .down.> sa_portal_v3
+
+  # 2. Columna 2 -> Columna 3 Arriba (Red y Datos Privados) y Abajo (Agente IA Interno) — intervalos Y disjuntos!
+  portal_v3 -right-> vpc_v3
+  vpc_v3 -down-> db_v3
+  sa_portal_v3 .right.> pdf_v3
 
   portal_v3 -right-> agent_v3
   agent_v3 .down.> sa_agent_v3
+  sa_agent_v3 .down.> registry_v3
+
+  # 3. Columna 3 -> Columna 4: Monitoreo arriba, Seguridad IA y Conocimiento abajo
+  db_v3 -right-> logs_v3
+  pdf_v3 -right-> logs_v3
+  db_v3 <.down. agent_v3
 
   agent_v3 -right-> guardrails_v3
-  guardrails_v3 -down-> search_v3
-  search_v3 -down-> gemini_v3
-  gemini_v3 (-down->) db_v3
-  db_v3 (-down->) buckets_v3
+  guardrails_v3 -down-> gemini_v3
+  gemini_v3 -down-> search_v3
+  logs_v3 <-down- guardrails_v3
 
-  sa_agent_v3 .right.> db_v3
-  sa_portal_v3 .right.> buckets_v3
+  # 4. Columna 4 -> Columna 5: Observabilidad y Seguridad + Google Cloud API abajo
+  logs_v3 -right-> secops_v3
+  logs_v3 -right-> wiz_v3
+  wiz_v3 <-down- gcp_api_v3
+  secops_v3 <.down. gcp_api_v3
 
-  guardrails_v3 .right.> registry_v3
-  search_v3 .right.> logs_v3
-  registry_v3 (-down->) logs_v3
-  logs_v3 -down-> secops_v3
+  # 5. Orden vertical explicito por columna
+  db_v3 (-down->) pdf_v3
+  pdf_v3 (-down->) agent_v3
+  logs_v3 (-down->) guardrails_v3
+  secops_v3 (-down->) wiz_v3
+  wiz_v3 (-down->) gcp_api_v3
 }
