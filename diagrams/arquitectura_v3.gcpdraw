@@ -45,7 +45,7 @@ elements {
 
       stacked_card run as agent_v3 {
         name "Clinical Agent"
-        display_name "Cloud Run + Google ADK"
+        display_name "Cloud Run + ADK IA"
       }
       card iam as sa_agent_v3 {
         name "Agent Identity"
@@ -63,7 +63,7 @@ elements {
 
       card logging as logs_v3 {
         name "Audit Logs"
-        display_name "Cloud Logging"
+        display_name "Cloud Logging (GCP)"
       }
     }
 
@@ -81,7 +81,7 @@ elements {
       }
       card storage as pdf_v3 {
         name "PDF Storage"
-        display_name "Cloud Storage (PDFs)"
+        display_name "Cloud Storage Soportes"
       }
     }
 
@@ -111,7 +111,7 @@ paths {
   waf_v3 -right-> portal_v3
   portal_v3 .down.> sa_portal_v3
 
-  # Aplicacion -> Red y Datos Privados
+  # Aplicacion -> Red y Datos Privados (igual que v1)
   portal_v3 -right-> vpc_v3
   vpc_v3 -down-> db_v3
   sa_portal_v3 .right.> pdf_v3
@@ -121,22 +121,21 @@ paths {
   agent_v3 .down.> sa_agent_v3
   sa_agent_v3 .down.> registry_v3
 
-  # Accesos del Agente IA -> Red/Datos (VPC + Orders DB + PDF Storage) y Seguridad IA/RAG
+  # Accesos del Agente IA -> Orders DB (via Private VPC), PDF Storage y Seguridad IA/RAG
   agent_v3 -right-> vpc_v3
-  sa_agent_v3 .right.> db_v3
   sa_agent_v3 .right.> pdf_v3
   agent_v3 -right-> guardrails_v3
   guardrails_v3 -down-> gemini_v3
   gemini_v3 -down-> search_v3
 
-  # Telemetria punteada hacia Audit Logs (Cloud Logging)
+  # Telemetria punteada hacia Audit Logs (bus izquierdo, central y perimetro derecho limpio!)
   lb_v3 .right.> logs_v3
   waf_v3 .right.> logs_v3
   portal_v3 .down.> logs_v3
   agent_v3 .down.> logs_v3
-  logs_v3 <.right. db_v3
-  logs_v3 <.right. pdf_v3
-  logs_v3 <.right. guardrails_v3
+  db_v3 .right.> logs_v3
+  pdf_v3 .right.> logs_v3
+  guardrails_v3 .right.> logs_v3
 
   # Orden vertical explicito
   sa_portal_v3 (-down->) agent_v3
