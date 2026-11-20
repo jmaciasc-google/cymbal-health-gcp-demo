@@ -1,7 +1,7 @@
 # Cymbal Health v1: Arquitectura Base Web Serverless (Sin IA)
 
 meta {
-  title "Cymbal Health v1: Arquitectura Web Serverless (Sin Agente IA)"
+  title "Cymbal Health Arquitectura Web"
 }
 
 elements {
@@ -80,9 +80,9 @@ paths {
   db_v1 (-down->) pdf_v1
   sa_portal_v1 .right.> pdf_v1
 
-  pdf_v1 .right.> logs_v1
+  pdf_v1 .down.> logs_v1
   db_v1 .right.> logs_v1
-  waf_v1 .left.> logs_v1
-  lb_v1 .left.> logs_v1
+  waf_v1 .right.> logs_v1
+  lb_v1 .right.> logs_v1
   portal_v1 .down.> logs_v1
 }
