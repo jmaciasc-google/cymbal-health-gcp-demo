@@ -39,31 +39,13 @@ elements {
       }
     }
 
-    group agent_layer_v3 {
-      name "Agente IA Interno"
-      background_color "#E8F0FE"
-
-      stacked_card run as agent_v3 {
-        name "Clinical Agent"
-        display_name "Cloud Run + ADK IA"
-      }
-      card iam as sa_agent_v3 {
-        name "Agent Identity"
-        display_name "Least Privilege"
-      }
-      card ai_hub as registry_v3 {
-        name "Agent Registry"
-        display_name "Catalogo IA"
-      }
-    }
-
     group ops_v3 {
       name "Monitoreo"
       background_color "#F3E8FD"
 
       card logging as logs_v3 {
         name "Audit Logs"
-        display_name "Cloud Logging (GCP)"
+        display_name "Cloud Logging"
       }
     }
 
@@ -81,7 +63,25 @@ elements {
       }
       card storage as pdf_v3 {
         name "PDF Storage"
-        display_name "Cloud Storage Soportes"
+        display_name "Cloud Storage"
+      }
+    }
+
+    group agent_layer_v3 {
+      name "Agente IA Interno"
+      background_color "#E8F0FE"
+
+      stacked_card run as agent_v3 {
+        name "Clinical Agent"
+        display_name "Cloud Run + ADK"
+      }
+      card iam as sa_agent_v3 {
+        name "Agent Identity"
+        display_name "Least Privilege"
+      }
+      card ai_hub as registry_v3 {
+        name "Agent Registry"
+        display_name "Catalogo IA"
       }
     }
 
@@ -111,35 +111,27 @@ paths {
   waf_v3 -right-> portal_v3
   portal_v3 .down.> sa_portal_v3
 
-  # Aplicacion -> Red y Datos Privados (igual que v1)
   portal_v3 -right-> vpc_v3
   vpc_v3 -down-> db_v3
   sa_portal_v3 .right.> pdf_v3
 
-  # Aplicacion -> Agente IA Interno
-  portal_v3 -down-> agent_v3
+  portal_v3 -right-> agent_v3
   agent_v3 .down.> sa_agent_v3
   sa_agent_v3 .down.> registry_v3
 
-  # Accesos del Agente IA -> Orders DB (via Private VPC), PDF Storage y Seguridad IA/RAG
-  agent_v3 -right-> vpc_v3
-  sa_agent_v3 .right.> pdf_v3
+  # Accesos limpios del Agente IA -> Orders DB, PDF Storage y Seguridad IA/RAG
+  db_v3 <-down- agent_v3
   agent_v3 -right-> guardrails_v3
   guardrails_v3 -down-> gemini_v3
   gemini_v3 -down-> search_v3
 
-  # Telemetria punteada hacia Audit Logs (bus izquierdo, central y perimetro derecho limpio!)
+  # Auditoria punteada hacia Monitoreo (LB, Cloud Armor, Web Portal y Clinical Agent)
   lb_v3 .right.> logs_v3
   waf_v3 .right.> logs_v3
   portal_v3 .down.> logs_v3
-  agent_v3 .down.> logs_v3
-  db_v3 .right.> logs_v3
-  pdf_v3 .right.> logs_v3
-  guardrails_v3 .right.> logs_v3
+  logs_v3 <.right. agent_v3
 
-  # Orden vertical explicito
-  sa_portal_v3 (-down->) agent_v3
-  registry_v3 (-down->) logs_v3
+  sa_portal_v3 (-down->) logs_v3
   db_v3 (-down->) pdf_v3
-  pdf_v3 (-down->) guardrails_v3
+  pdf_v3 (-down->) agent_v3
 }
