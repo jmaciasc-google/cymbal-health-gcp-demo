@@ -1,7 +1,7 @@
 # Cymbal Health v3: Arquitectura Web + Agente IA Seguro
 
 meta {
-  title "Cymbal Health Arquitectura v3: Web + Agente IA Seguro"
+  title "Cymbal Health Arquitectura: Web + Agente IA Seguro"
 }
 
 elements {
@@ -39,6 +39,34 @@ elements {
       }
     }
 
+    group agent_layer_v3 {
+      name "Agente IA Interno"
+      background_color "#E8F0FE"
+
+      stacked_card run as agent_v3 {
+        name "Clinical Agent"
+        display_name "Cloud Run + Google ADK"
+      }
+      card iam as sa_agent_v3 {
+        name "Agent Identity"
+        display_name "Least Privilege"
+      }
+      card ai_hub as registry_v3 {
+        name "Agent Registry"
+        display_name "Catalogo IA"
+      }
+    }
+
+    group ops_v3 {
+      name "Monitoreo"
+      background_color "#F3E8FD"
+
+      card logging as logs_v3 {
+        name "Audit Logs"
+        display_name "Cloud Logging"
+      }
+    }
+
     group datos_v3 {
       name "Red y Datos Privados"
       background_color "#FEF7E0"
@@ -53,25 +81,7 @@ elements {
       }
       card storage as pdf_v3 {
         name "PDF Storage"
-        display_name "Cloud Storage"
-      }
-    }
-
-    group agent_layer_v3 {
-      name "Agente IA Interno"
-      background_color "#E8F0FE"
-
-      stacked_card run as agent_v3 {
-        name "Clinical Agent"
-        display_name "Cloud Run + ADK"
-      }
-      card iam as sa_agent_v3 {
-        name "Agent Identity"
-        display_name "Least Privilege"
-      }
-      card ai_hub as registry_v3 {
-        name "Agent Registry"
-        display_name "Catalogo IA"
+        display_name "Cloud Storage (PDFs)"
       }
     }
 
@@ -92,74 +102,45 @@ elements {
         display_name "Vertex AI Search"
       }
     }
-
-    group ops_v3 {
-      name "Monitoreo"
-      background_color "#F3E8FD"
-
-      card logging as logs_v3 {
-        name "Audit Logs"
-        display_name "Cloud Logging"
-      }
-    }
-
-    group obs_sec_v3 {
-      name "Observabilidad y Seguridad"
-      background_color "#FCE8E6"
-
-      card security_command_center as secops_v3 {
-        name "Google SecOps"
-        display_name "SIEM y SOAR"
-      }
-      card asset_inventory as wiz_v3 {
-        name "Wiz"
-        display_name "Wiz Cloud + Defend"
-      }
-    }
-
-    card apis_services as gcp_api_v3 {
-      name "Google Cloud API"
-      display_name "Inventario y Control"
-    }
   }
 }
 
 paths {
-  # 1. Perimetro -> Aplicacion (identico a v1!)
   usuarios_v3 -right-> lb_v3 : "HTTPS"
   lb_v3 -down-> waf_v3
   waf_v3 -right-> portal_v3
   portal_v3 .down.> sa_portal_v3
 
-  # 2. Columna 2 -> Columna 3 Arriba (Red y Datos Privados) y Abajo (Agente IA Interno) — intervalos Y disjuntos!
+  # Aplicacion -> Red y Datos Privados
   portal_v3 -right-> vpc_v3
   vpc_v3 -down-> db_v3
   sa_portal_v3 .right.> pdf_v3
 
-  portal_v3 -right-> agent_v3
+  # Aplicacion -> Agente IA Interno
+  portal_v3 -down-> agent_v3
   agent_v3 .down.> sa_agent_v3
   sa_agent_v3 .down.> registry_v3
 
-  # 3. Columna 3 -> Columna 4: Monitoreo arriba, Seguridad IA y Conocimiento abajo
-  db_v3 -right-> logs_v3
-  pdf_v3 -right-> logs_v3
-  db_v3 <.down. agent_v3
-
+  # Accesos del Agente IA -> Red/Datos (VPC + Orders DB + PDF Storage) y Seguridad IA/RAG
+  agent_v3 -right-> vpc_v3
+  sa_agent_v3 .right.> db_v3
+  sa_agent_v3 .right.> pdf_v3
   agent_v3 -right-> guardrails_v3
   guardrails_v3 -down-> gemini_v3
   gemini_v3 -down-> search_v3
-  logs_v3 <-down- guardrails_v3
 
-  # 4. Columna 4 -> Columna 5: Observabilidad y Seguridad + Google Cloud API abajo
-  logs_v3 -right-> secops_v3
-  logs_v3 -right-> wiz_v3
-  wiz_v3 <-down- gcp_api_v3
-  secops_v3 <.down. gcp_api_v3
+  # Telemetria punteada hacia Audit Logs (Cloud Logging)
+  lb_v3 .right.> logs_v3
+  waf_v3 .right.> logs_v3
+  portal_v3 .down.> logs_v3
+  agent_v3 .down.> logs_v3
+  logs_v3 <.right. db_v3
+  logs_v3 <.right. pdf_v3
+  logs_v3 <.right. guardrails_v3
 
-  # 5. Orden vertical explicito por columna
+  # Orden vertical explicito
+  sa_portal_v3 (-down->) agent_v3
+  registry_v3 (-down->) logs_v3
   db_v3 (-down->) pdf_v3
-  pdf_v3 (-down->) agent_v3
-  logs_v3 (-down->) guardrails_v3
-  secops_v3 (-down->) wiz_v3
-  wiz_v3 (-down->) gcp_api_v3
+  pdf_v3 (-down->) guardrails_v3
 }
