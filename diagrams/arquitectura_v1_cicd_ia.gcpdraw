@@ -5,53 +5,54 @@ meta {
 }
 
 elements {
-  card laptop_and_phone as usuarios_v1 {
-    name "Usuarios Externos"
-    display_name "Navegador"
+  group linktic_team {
+    name "Equipo Linktic"
+    background_color "#F8F9FA"
+
+    card users as admin_linktic {
+      name "Usuarios Internos"
+      display_name "Areas de Negocio"
+    }
+
+    card users as dev_linktic {
+      name "Developers"
+      display_name "Ingenieria"
+    }
   }
 
-  card users as dev_linktic {
-    name "Developers"
-    display_name "Linktic"
+  group third_party_scm {
+    name "Codigo Fuente (3P)"
+    background_color "#F8F9FA"
+
+    card git as github_repo {
+      name "GitHub"
+      display_name "Repositorios Git"
+      icon_url "https://drive.google.com/file/d/1Cvbpe0927e_cCyfKIvfvlwZmvcd5Kngn/view"
+    }
   }
 
-  card users as admin_linktic {
-    name "Usuarios Internos"
-    display_name "Linktic"
-  }
+  group external_clients {
+    name "Acceso Publico"
+    background_color "#F8F9FA"
 
-  card git as github_repo {
-    name "GitHub"
-    display_name "Repositorios"
-    icon_url "https://drive.google.com/file/d/1Cvbpe0927e_cCyfKIvfvlwZmvcd5Kngn/view"
+    card laptop_and_phone as usuarios_v1 {
+      name "Usuarios Externos"
+      display_name "Navegador"
+    }
   }
 
   gcp {
-    group perimetro_v1 {
-      name "Perimetro Global"
-      background_color "#E8F0FE"
-
-      card load_balancer as lb_v1 {
-        name "Load Balancer"
-        display_name "HTTPS Global"
-      }
-      card armor as waf_v1 {
-        name "Cloud Armor"
-        display_name "WAF OWASP"
-      }
-    }
-
     group ideacion_codigo {
       name "Herramienta de IA Interna"
       background_color "#E8F0FE"
 
-      card laptop as agy_pc {
-        name "Antigravity"
-        display_name "Subscripcion de GE"
-      }
       card vertex_ai as gemini_ent {
         name "Gemini Enterprise"
         display_name "Contexto Empresarial"
+      }
+      card laptop as agy_pc {
+        name "Antigravity"
+        display_name "Subscripcion de GE"
       }
     }
 
@@ -77,6 +78,30 @@ elements {
       }
     }
 
+    group perimetro_v1 {
+      name "Perimetro Global"
+      background_color "#E8F0FE"
+
+      card load_balancer as lb_v1 {
+        name "Load Balancer"
+        display_name "HTTPS Global"
+      }
+      card armor as waf_v1 {
+        name "Cloud Armor"
+        display_name "WAF OWASP"
+      }
+    }
+
+    card gmail as gmail_ws {
+      name "Gmail"
+      display_name "Correos"
+    }
+
+    card drive as drive_ws {
+      name "Google Drive"
+      display_name "Documentos"
+    }
+
     group app_v1 {
       name "Aplicacion"
       background_color "#E6F4EA"
@@ -89,16 +114,6 @@ elements {
         name "Service Account"
         display_name "Least Privilege"
       }
-    }
-
-    card gmail as gmail_ws {
-      name "Gmail"
-      display_name "Correos"
-    }
-
-    card drive as drive_ws {
-      name "Google Drive"
-      display_name "Documentos"
     }
 
     group datos_v1 {
@@ -129,11 +144,6 @@ elements {
       }
     }
 
-    card apis_services as gcp_api {
-      name "Google Cloud API"
-      display_name "Inventario y Control"
-    }
-
     group obs_sec {
       name "Observabilidad y Seguridad"
       background_color "#FCE8E6"
@@ -147,61 +157,61 @@ elements {
         display_name "Wiz Cloud + Defend"
       }
     }
+
+    card apis_services as gcp_api {
+      name "Google Cloud API"
+      display_name "Inventario y Control"
+    }
   }
 }
 
 paths {
-  # Columna 0 -> Columna 1
-  usuarios_v1 -right-> lb_v1 : "HTTPS"
-  lb_v1 -down-> waf_v1
-
-  dev_linktic -right-> agy_pc
-  dev_linktic .right.> gemini_ent
+  # 1. Columna 0 <-> Columna 1 (100% alineados horizontalmente sin solapamientos!)
   admin_linktic -right-> gemini_ent
+  dev_linktic .right.> gemini_ent
+  dev_linktic -right-> agy_pc
   github_repo <-right- agy_pc
-  github_repo .right.> gemini_ent
-
   github_repo -right-> cloud_build
+
   cloud_build -down-> art_reg
   art_reg -down-> codemender
   codemender -down-> wiz_code
 
-  # Columna 1 <-> Columna 2
-  waf_v1 -right-> portal_v1
-  art_reg -right-> portal_v1
-  portal_v1 .down.> sa_portal_v1
+  usuarios_v1 -right-> lb_v1 : "HTTPS"
+  lb_v1 -down-> waf_v1
+
+  # 2. Columna 1 <-> Columna 2 (Arriba: Gmail y Drive -> Gemini Enterprise | Abajo: CI/CD + WAF -> Web Portal)
   gemini_ent <-right- gmail_ws
   gemini_ent <-right- drive_ws
 
-  # Columna 2 -> Columna 3 (Red y Datos Privados)
+  art_reg -right-> portal_v1
+  waf_v1 -right-> portal_v1
+  portal_v1 .down.> sa_portal_v1
+
+  # 3. Columna 2 -> Columna 3 -> Columna 4 -> Columna 5 <- Columna 6
   portal_v1 -right-> vpc_v1
   vpc_v1 -down-> db_v1
   sa_portal_v1 .right.> pdf_v1
-
-  # Columna 3 -> Columna 4 (Monitoreo y Google Cloud API)
   db_v1 -right-> logs_v1
   pdf_v1 -right-> logs_v1
-  pdf_v1 (-right->) gcp_api
 
-  # Columna 4 -> Columna 5 (Flechas rectas y limpias a Google SecOps y Wiz)
   logs_v1 -right-> google_secops
   logs_v1 -right-> wiz_cloud
-  gcp_api .right.> google_secops
-  gcp_api .right.> wiz_cloud
+  google_secops <.right. gcp_api
+  wiz_cloud <-right- gcp_api
 
-  # Orden vertical explicito por columna
-  usuarios_v1 (-down->) dev_linktic
-  dev_linktic (-down->) admin_linktic
-  admin_linktic (-down->) github_repo
+  # 4. Orden vertical explicito por columna
+  admin_linktic (-down->) dev_linktic
+  dev_linktic (-down->) github_repo
+  github_repo (-down->) usuarios_v1
 
-  waf_v1 (-down->) agy_pc
-  agy_pc (-down->) gemini_ent
-  gemini_ent (-down->) cloud_build
+  gemini_ent (-down->) agy_pc
+  agy_pc (-down->) cloud_build
+  wiz_code (-down->) lb_v1
 
-  sa_portal_v1 (-down->) gmail_ws
   gmail_ws (-down->) drive_ws
+  drive_ws (-down->) portal_v1
 
   db_v1 (-down->) pdf_v1
-  logs_v1 (-down->) gcp_api
   google_secops (-down->) wiz_cloud
 }
