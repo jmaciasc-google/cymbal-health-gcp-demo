@@ -10,13 +10,13 @@ elements {
     display_name "Navegador"
   }
 
-  card users as admin_linktic {
-    name "Usuarios Internos"
+  card users as dev_linktic {
+    name "Developers"
     display_name "Linktic"
   }
 
-  card users as dev_linktic {
-    name "Developers"
+  card users as admin_linktic {
+    name "Usuarios Internos"
     display_name "Linktic"
   }
 
@@ -45,13 +45,13 @@ elements {
       name "Herramienta de IA Interna"
       background_color "#E8F0FE"
 
-      card vertex_ai as gemini_ent {
-        name "Gemini Enterprise"
-        display_name "Contexto Empresarial"
-      }
       card laptop as agy_pc {
         name "Antigravity"
         display_name "Subscripcion de GE"
+      }
+      card vertex_ai as gemini_ent {
+        name "Gemini Enterprise"
+        display_name "Contexto Empresarial"
       }
     }
 
@@ -101,21 +101,6 @@ elements {
       display_name "Documentos"
     }
 
-    group ops_v1 {
-      name "Monitoreo"
-      background_color "#F3E8FD"
-
-      card logging as logs_v1 {
-        name "Audit Logs"
-        display_name "Cloud Logging"
-      }
-    }
-
-    card apis_services as gcp_api {
-      name "Google Cloud API"
-      display_name "Inventario y Control"
-    }
-
     group datos_v1 {
       name "Red y Datos Privados"
       background_color "#FEF7E0"
@@ -132,6 +117,21 @@ elements {
         name "PDF Storage"
         display_name "Cloud Storage"
       }
+    }
+
+    group ops_v1 {
+      name "Monitoreo"
+      background_color "#F3E8FD"
+
+      card logging as logs_v1 {
+        name "Audit Logs"
+        display_name "Cloud Logging"
+      }
+    }
+
+    card apis_services as gcp_api {
+      name "Google Cloud API"
+      display_name "Inventario y Control"
     }
 
     group obs_sec {
@@ -151,23 +151,13 @@ elements {
 }
 
 paths {
-  # Columna 0 (fuera de Google Cloud)
-  usuarios_v1 (-down->) admin_linktic
-  admin_linktic (-down->) dev_linktic
-  dev_linktic (-down->) github_repo
-
-  # Columna 1 (dentro de Google Cloud): Perimetro arriba, Herramienta IA en medio, CI/CD abajo
-  waf_v1 (-down->) gemini_ent
-  gemini_ent (-down->) agy_pc
-  agy_pc (-down->) cloud_build
-
-  # Interacciones Columna 0 <-> Columna 1
+  # Columna 0 -> Columna 1
   usuarios_v1 -right-> lb_v1 : "HTTPS"
   lb_v1 -down-> waf_v1
 
-  admin_linktic -right-> gemini_ent
-  dev_linktic .right.> gemini_ent
   dev_linktic -right-> agy_pc
+  dev_linktic .right.> gemini_ent
+  admin_linktic -right-> gemini_ent
   github_repo <-right- agy_pc
   github_repo .right.> gemini_ent
 
@@ -176,33 +166,42 @@ paths {
   art_reg -down-> codemender
   codemender -down-> wiz_code
 
-  # Columna 2 (dentro de Google Cloud): Aplicacion, Gmail/Drive sueltos, Monitoreo y Google Cloud API
+  # Columna 1 <-> Columna 2
   waf_v1 -right-> portal_v1
   art_reg -right-> portal_v1
   portal_v1 .down.> sa_portal_v1
-  sa_portal_v1 (-down->) gmail_ws
-  gmail_ws (-down->) drive_ws
-  drive_ws (-down->) logs_v1
-  logs_v1 (-down->) gcp_api
+  gemini_ent <-right- gmail_ws
+  gemini_ent <-right- drive_ws
 
-  gmail_ws .left.> gemini_ent
-  drive_ws .left.> gemini_ent
-  portal_v1 .down.> logs_v1
-
-  # Columna 3 (dentro de Google Cloud): Red y Datos Privados + Observabilidad y Seguridad
+  # Columna 2 -> Columna 3 (Red y Datos Privados)
   portal_v1 -right-> vpc_v1
   vpc_v1 -down-> db_v1
-  db_v1 (-down->) pdf_v1
   sa_portal_v1 .right.> pdf_v1
-  db_v1 .left.> logs_v1
-  pdf_v1 .left.> logs_v1
 
-  pdf_v1 (-down->) google_secops
-  google_secops (-down->) wiz_cloud
+  # Columna 3 -> Columna 4 (Monitoreo y Google Cloud API)
+  db_v1 -right-> logs_v1
+  pdf_v1 -right-> logs_v1
+  pdf_v1 (-right->) gcp_api
 
-  # Cloud Logging y Google Cloud API hacia Google SecOps y Wiz
+  # Columna 4 -> Columna 5 (Flechas rectas y limpias a Google SecOps y Wiz)
   logs_v1 -right-> google_secops
   logs_v1 -right-> wiz_cloud
   gcp_api .right.> google_secops
   gcp_api .right.> wiz_cloud
+
+  # Orden vertical explicito por columna
+  usuarios_v1 (-down->) dev_linktic
+  dev_linktic (-down->) admin_linktic
+  admin_linktic (-down->) github_repo
+
+  waf_v1 (-down->) agy_pc
+  agy_pc (-down->) gemini_ent
+  gemini_ent (-down->) cloud_build
+
+  sa_portal_v1 (-down->) gmail_ws
+  gmail_ws (-down->) drive_ws
+
+  db_v1 (-down->) pdf_v1
+  logs_v1 (-down->) gcp_api
+  google_secops (-down->) wiz_cloud
 }
