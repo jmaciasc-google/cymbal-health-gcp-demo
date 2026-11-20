@@ -1,0 +1,162 @@
+# Cymbal Health v1: Runtime Serverless + Desarrollo Agentico (Gemini Enterprise, Antigravity, CodeMender y Wiz)
+
+meta {
+  title "Cymbal Health v1: Desarrollo con IA (Gemini Enterprise + Antigravity) y DevSecOps (CodeMender + Wiz)"
+}
+
+elements {
+  card laptop_and_phone as usuarios_v1 {
+    name "Usuarios"
+    display_name "Navegador HTTPS"
+  }
+  card gmail as gmail_ext {
+    name "Gmail"
+    display_name "Correos"
+  }
+  card drive as drive_ext {
+    name "Google Drive"
+    display_name "Documentos"
+  }
+  card laptop as dev_pc {
+    name "Antigravity"
+    display_name "PC Desarrollador"
+  }
+
+  gcp {
+    group perimetro_v1 {
+      name "Perimetro Global"
+      background_color "#E8F0FE"
+
+      card load_balancer as lb_v1 {
+        name "Load Balancer"
+        display_name "HTTPS Global"
+      }
+      card armor as waf_v1 {
+        name "Cloud Armor"
+        display_name "WAF OWASP"
+      }
+    }
+
+    group ideacion_codigo {
+      name "Ideacion IA y Codigo"
+      background_color "#E8F0FE"
+
+      card vertex_ai as gemini_ent {
+        name "Gemini Enterprise"
+        display_name "Contexto Integrado"
+      }
+      card git as github_repo {
+        name "GitHub"
+        display_name "Repositorio y PRs"
+      }
+    }
+
+    group app_v1 {
+      name "Aplicacion"
+      background_color "#E6F4EA"
+
+      stacked_card run as portal_v1 {
+        name "Web Portal"
+        display_name "Cloud Run"
+      }
+      card iam as sa_portal_v1 {
+        name "Service Account"
+        display_name "Least Privilege"
+      }
+    }
+
+    group cicd_gate {
+      name "CI/CD y Seguridad"
+      background_color "#FEF7E0"
+
+      card build as cloud_build {
+        name "Cloud Build"
+        display_name "Pipeline CI/CD"
+      }
+      card artifact_registry as art_reg {
+        name "Artifact Registry"
+        display_name "Contenedores"
+      }
+      card ai_platform as codemender {
+        name "CodeMender"
+        display_name "Sandbox AppSec IA"
+      }
+      card security_command_center as wiz_sec {
+        name "Wiz"
+        display_name "Wiz Code + Cloud"
+      }
+    }
+
+    group datos_v1 {
+      name "Red y Datos Privados"
+      background_color "#FEF7E0"
+
+      card vpc as vpc_v1 {
+        name "Private VPC"
+        display_name "Red Aislada"
+      }
+      card sql as db_v1 {
+        name "Orders DB"
+        display_name "Cloud SQL PostgreSQL"
+      }
+      card storage as pdf_v1 {
+        name "PDF Storage"
+        display_name "Cloud Storage"
+      }
+    }
+
+    group ops_v1 {
+      name "Monitoreo"
+      background_color "#F3E8FD"
+
+      card logging as logs_v1 {
+        name "Audit Logs"
+        display_name "Cloud Logging"
+      }
+    }
+  }
+}
+
+paths {
+  # Columna 0: Usuarios arriba (Runtime), Gmail + Drive + Antigravity abajo (Desarrollo)
+  usuarios_v1 (-down->) gmail_ext
+  gmail_ext (-down->) drive_ext
+  drive_ext (-down->) dev_pc
+
+  # Fila Superior: Runtime v1 (Col 0 -> Col 1 -> Col 2 -> Col 3)
+  usuarios_v1 -right-> lb_v1 : "HTTPS"
+  lb_v1 -down-> waf_v1
+  waf_v1 -right-> portal_v1
+  portal_v1 .down.> sa_portal_v1
+  portal_v1 -right-> vpc_v1
+  vpc_v1 -down-> db_v1
+  db_v1 (-down->) pdf_v1
+  sa_portal_v1 .right.> pdf_v1
+
+  # Anclas verticales para alinear Fila Inferior exactamente debajo de cada columna
+  waf_v1 (-down->) gemini_ent
+  sa_portal_v1 (-down->) cloud_build
+  pdf_v1 (-down->) logs_v1
+
+  # Fila Inferior Col 0 -> Col 1: Gemini Enterprise (Gmail, Drive, GitHub) + Antigravity en PC Dev
+  gmail_ext -right-> gemini_ent
+  drive_ext -right-> gemini_ent
+  gemini_ent .down.> github_repo
+  dev_pc .right.> gemini_ent
+  dev_pc -right-> github_repo
+
+  # Fila Inferior Col 1 -> Col 2: GitHub -> Cloud Build + Artifact Registry + CodeMender + Wiz
+  github_repo -right-> cloud_build
+  cloud_build -down-> art_reg
+  art_reg -down-> codemender
+  codemender -down-> wiz_sec
+
+  # Despliegue hacia Web Portal (misma Columna 2, saliendo por la derecha)
+  portal_v1 <-down- art_reg
+  portal_v1 .right.> logs_v1
+
+  # Monitoreo hacia Audit Logs (Col 3) y lectura de postura/logs por Wiz (Col 2)
+  pdf_v1 .up.> logs_v1
+  db_v1 .up.> logs_v1
+  logs_v1 .left.> wiz_sec
+}
