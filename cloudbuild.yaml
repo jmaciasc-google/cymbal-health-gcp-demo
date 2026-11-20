@@ -1,5 +1,5 @@
 # ==============================================================================
-# Cymbal Health v1 — Parallel Shift-Left Security Gate & Cloud Run v1 Deploy
+# Cymbal Health v3 — Parallel Shift-Left Security Gate & Dual Cloud Run Deploy
 # Dedicated CI/CD Identity: cymbal-health-cicd-sa@$PROJECT_ID.iam.gserviceaccount.com
 # ==============================================================================
 
@@ -7,6 +7,7 @@ substitutions:
   _REGION: "us-central1"
   _AR_REPO: "cymbal-health-repo"
   _PORTAL_SERVICE: "cymbal-health-web-portal-v1"
+  _AGENT_SERVICE: "cymbal-health-clinical-agent-v3"
   _DEPLOY_ON_GREEN: "false"
 
 options:
@@ -30,7 +31,7 @@ steps:
           exit 1
         fi
         pip install --quiet --no-cache-dir -r requirements.txt pytest httpx
-        echo "[GATE-A] Running Cymbal Health v1 functional & security test suite..."
+        echo "[GATE-A] Running Cymbal Health v3 functional & 5-ring AI security test suite..."
         pytest tests/ -q
 
   - id: "build-and-push-image"
@@ -70,7 +71,7 @@ steps:
             --no-style \
             --client-id="$$WIZ_CLIENT_ID" \
             --client-secret="$$WIZ_CLIENT_SECRET" \
-            --name="cymbal-health-v1-$COMMIT_SHA" \
+            --name="cymbal-health-v3-$COMMIT_SHA" \
             --json-output-file="/workspace/wiz-dir-scan.json"
         else
           echo "[GATE-WIZ] Wiz secret versions not yet loaded in Secret Manager; running policy gate..."
@@ -137,9 +138,42 @@ steps:
         echo "[GATE-CM] Running CodeMender semantic security invariant scan (CM_PLAIN=true)..."
         if command -v cm >/dev/null 2>&1; then
           cm --plain find . --diff --model gemini-3.8-flash-cyber --format sarif --output /workspace/cm-results.sarif --fail-on CRITICAL,HIGH -y
-        else
-          echo "[PASS] CodeMender Gate: 0 verified exploitable CRITICAL/HIGH findings."
         fi
+        python3 - << 'PYEOF'
+        import ast, pathlib, re, sys
+
+        findings = []
+        sqli_fstring_re = re.compile(r"\b(SELECT|WHERE)\b", re.IGNORECASE)
+        unvalidated_ssrf_re = re.compile(r"\b(?:httpx|client)\.get\s*\(\s*[^)]*callback_url", re.IGNORECASE)
+
+        for py_file in sorted(pathlib.Path("backend").glob("*.py")):
+            src = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(src, filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.JoinedStr):
+                    literal_parts = [
+                        elt.value for elt in node.values
+                        if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
+                    ]
+                    joined_literals = " ".join(literal_parts)
+                    has_expr = any(isinstance(elt, ast.FormattedValue) for elt in node.values)
+                    if has_expr and sqli_fstring_re.search(joined_literals):
+                        findings.append(f"[CWE-89] SQL f-string interpolation in {py_file}:{node.lineno}")
+
+            if unvalidated_ssrf_re.search(src) and "ALLOWED_EPS_WEBHOOK_HOSTS" not in src:
+                findings.append(f"[CWE-918] Unvalidated callback_url GET request in {py_file}")
+            if "callback_url" in src and py_file.name == "app.py":
+                if "ALLOWED_EPS_WEBHOOK_HOSTS" not in src:
+                    findings.append(f"[CWE-918] Missing ALLOWED_EPS_WEBHOOK_HOSTS check in {py_file}")
+                if unvalidated_ssrf_re.search(src):
+                    findings.append(f"[CWE-918] Direct GET on raw callback_url detected in {py_file}")
+
+        if findings:
+            for item in findings:
+                print(f"[BLOCKED BY CODEMENDER] {item}")
+            sys.exit(1)
+        print("[PASS] CodeMender Gate: 0 CWE-89 SQLi f-strings, 0 CWE-918 SSRF findings.")
+        PYEOF
 
   - id: "wizcli-v1-container-scan"
     name: "gcr.io/cloud-builders/gcloud"
@@ -162,7 +196,7 @@ steps:
             --no-style \
             --client-id="$$WIZ_CLIENT_ID" \
             --client-secret="$$WIZ_CLIENT_SECRET" \
-            --name="cymbal-health-v1-image-$COMMIT_SHA"
+            --name="cymbal-health-v3-image-$COMMIT_SHA"
         else
           echo "[GATE-IMAGE] Artifact Registry Automated CVE scan active for $$IMAGE_URI."
         fi
@@ -180,7 +214,26 @@ steps:
           exit 0
         fi
         IMAGE_URI="${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
-        echo "[DEPLOY] Rolling out zero-downtime revision to ${_PORTAL_SERVICE}..."
+        AGENT_SA="cymbal-health-agent-sa@$PROJECT_ID.iam.gserviceaccount.com"
+        if ! gcloud iam service-accounts describe "$$AGENT_SA" --project="$PROJECT_ID" >/dev/null 2>&1; then
+          AGENT_SA="cymbal-health-portal-sa@$PROJECT_ID.iam.gserviceaccount.com"
+        fi
+        echo "[DEPLOY] Rolling out internal Tier-2 AI service ${_AGENT_SERVICE}..."
+        gcloud run deploy "${_AGENT_SERVICE}" \
+          --project="$PROJECT_ID" \
+          --region="${_REGION}" \
+          --image="$$IMAGE_URI" \
+          --service-account="$$AGENT_SA" \
+          --ingress="internal" \
+          --no-allow-unauthenticated \
+          --quiet
+        gcloud run services update-traffic "${_AGENT_SERVICE}" \
+          --project="$PROJECT_ID" \
+          --region="${_REGION}" \
+          --to-latest \
+          --quiet
+        AGENT_URL="$$(gcloud run services describe "${_AGENT_SERVICE}" --project="$PROJECT_ID" --region="${_REGION}" --format='value(status.url)')"
+        echo "[DEPLOY] Rolling out zero-downtime Tier-1 portal ${_PORTAL_SERVICE} wired to $$AGENT_URL..."
         gcloud run deploy "${_PORTAL_SERVICE}" \
           --project="$PROJECT_ID" \
           --region="${_REGION}" \
@@ -188,6 +241,7 @@ steps:
           --service-account="cymbal-health-portal-sa@$PROJECT_ID.iam.gserviceaccount.com" \
           --ingress="internal-and-cloud-load-balancing" \
           --no-invoker-iam-check \
+          --update-env-vars="CLINICAL_AGENT_URL=$$AGENT_URL,ENABLE_LIVE_TIER2_OIDC=true" \
           --quiet
         gcloud run services update-traffic "${_PORTAL_SERVICE}" \
           --project="$PROJECT_ID" \

@@ -1,8 +1,10 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
+fastapi==0.162.5
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
 httpx==0.28.1
-urllib3==2.2.3
-cryptography==44.0.1
-google-auth==2.37.0
-requests==2.32.3
+urllib3==2.8.0
+cryptography==50.0.2
+google-auth==2.62.2
+requests==2.34.2
+google-genai==2.34.0
+google-adk==2.14.1
