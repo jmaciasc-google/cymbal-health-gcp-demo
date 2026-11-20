@@ -34,6 +34,15 @@
         </svg>
         <span>Nueva orden</span>
       </button>
+
+      <button type="button" class="btn btn-primary" id="btn-open-clinical-agent">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"></path>
+          <path d="M19 15v4"></path>
+          <path d="M17 17h4"></path>
+        </svg>
+        <span>Asistente clinico IA</span>
+      </button>
     </div>
   </header>
 
@@ -206,11 +215,68 @@
           <div class="pdf-preview-bar">
             <span id="detail-folio-label">Soporte oficial de ordenamiento medico</span>
             <div class="pdf-actions">
+              <button type="button" class="btn btn-primary" id="btn-ask-agent-from-order">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"></path>
+                </svg>
+                <span>Validar pertinencia con IA</span>
+              </button>
               <a class="btn btn-secondary" id="link-download-pdf" href="#" target="_blank" rel="noopener">Abrir PDF completo</a>
             </div>
           </div>
           <iframe id="iframe-pdf-preview" class="pdf-frame" title="Orden medica autorizada PDF"></iframe>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: Asistente Clinico de Auditoria CUPS / CIE-10 -->
+  <div class="modal-backdrop" id="modal-clinical-agent" role="dialog" aria-modal="true" aria-labelledby="title-clinical-agent" hidden>
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon modal-icon-accent" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z"></path>
+              <path d="M19 15v4"></path>
+              <path d="M17 17h4"></path>
+            </svg>
+          </span>
+          <div>
+            <h2 id="title-clinical-agent">Asistente clinico de auditoria CUPS / CIE-10</h2>
+            <span class="modal-subtitle">Consulta normativa de protocolos medicos y pertinencia de ordenes</span>
+          </div>
+        </div>
+        <button type="button" class="btn-icon-close" data-close-modal="modal-clinical-agent" aria-label="Cerrar asistente clinico">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <div class="modal-body agent-modal-body">
+        <div class="agent-context-bar" id="agent-order-context" hidden>
+          <span id="agent-order-context-label">Orden vinculada:</span>
+          <button type="button" class="btn btn-subtle" id="btn-clear-agent-order">Quitar vinculo</button>
+        </div>
+
+        <div class="agent-messages" id="agent-messages" aria-live="polite">
+          <article class="agent-msg agent-msg-assistant">
+            <span class="agent-msg-role">Auditoria Medica Cymbal Health</span>
+            <p>Ingrese una consulta sobre criterios de pertinencia CUPS / CIE-10, preparacion del paciente o estado de una orden especifica.</p>
+          </article>
+        </div>
+
+        <form id="form-clinical-agent" class="agent-input-row" autocomplete="off">
+          <textarea
+            id="input-agent-prompt"
+            name="prompt"
+            rows="2"
+            required
+            maxlength="1200"
+            placeholder="Escriba su consulta clinica (ej. criterios CUPS 895001 o pertinencia de ORD-2026-1041)"
+            aria-label="Consulta para el asistente clinico"
+          ></textarea>
+          <button type="submit" class="btn btn-primary" id="btn-submit-agent">Consultar</button>
+        </form>
       </div>
     </div>
   </div>

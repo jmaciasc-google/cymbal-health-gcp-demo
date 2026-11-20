@@ -1,0 +1,81 @@
+DOCUMENTO DE REQUERIMIENTO SALIDO DE GEMINI ENTERPRISE (RFC-CLIN-2026-042)
+ORIGEN: Sintesis de Correos (Gmail), Estandares de Ingenieria (Google Drive) y Backlog (GitHub)
+DESTINO: Implementacion desde rama 'v1' sobre servicio 'cymbal-health-web-portal-v1'
+
+================================================================================
+1. OBJETIVO FUNCIONAL DEL NUEVO FEATURE
+================================================================================
+Evolucionar el portal productivo actual Cymbal Health (actualmente en estado v1 sin
+componentes de IA) incorporando dos capacidades integradas:
+
+A) Asistente Clinico de Auditoria de Pertinencia CUPS / CIE-10 ("cymbal-clinical-agent"):
+   - Vive dentro de la misma interfaz web actual mediante una ventana modal limpia
+     (#modal-clinical-agent), activada por el boton primario "Asistente clinico IA"
+     (#btn-open-clinical-agent) a la derecha de "+ Nueva orden", y por el boton
+     "Validar pertinencia con IA" (#btn-ask-agent-from-order) dentro del visor PDF.
+   - Cero botones de prompts pre-creados, cero chips de prueba y 0% emojis Unicode.
+   - Permite a medicos auditores consultar criterios medicos de los 6 protocolos
+     oficiales en Vertex AI Search y validar el estado de una orden especifica.
+
+B) Endpoint de Notificacion de Estado hacia Aseguradoras EPS:
+   - Exponer POST /api/orders/{order_code}/notify-eps recibiendo JSON {"callback_url": "..."}
+     para notificar cambios de autorizacion unicamente hacia dominios HTTPS aprobados
+     en lista blanca (ALLOWED_EPS_WEBHOOK_HOSTS: eps-sanitas.co, compensar.com, sura.co).
+
+================================================================================
+2. ARQUITECTURA APROBADA EN GOOGLE CLOUD Y SDKS OFICIALES
+================================================================================
+- SDKs oficiales en requirements.txt:
+  * google-adk==2.14.1 (google.adk.agents.Agent + google.adk.tools.FunctionTool)
+  * google-genai==2.34.0 (genai.Client(vertexai=True) con gemini-2.5-flash,
+    max_output_tokens=1024 y ThinkingConfig(thinking_budget=0))
+  * Dependencias base parchadas sin CVEs: fastapi==0.162.5, uvicorn[standard]==0.54.0,
+    pydantic==2.14.3, httpx==0.28.1, urllib3==2.8.0, cryptography==50.0.2,
+    google-auth==2.62.2, requests==2.34.2.
+- Cero llaves estaticas (0% API Keys): autenticacion 100% Application Default Credentials
+  (ADC). Rechazar ejecucion si existen GEMINI_API_KEY, GOOGLE_API_KEY u OPENAI_API_KEY.
+- Doble fuente de datos de solo lectura:
+  1. Vertex AI Search (discoveryengine v1, Data Store "cymbal-health-clinical-protocols-ds"
+     en ubicacion "global", rol roles/discoveryengine.viewer) con corpus local de respaldo
+     de los 6 protocolos CUPS (895001/881234, 883101/883102, 921801, 890343, Ley 1581, 903895).
+  2. Vista SQL autorizada clinical_orders_public_v (confidential = 0) consultada solo
+     mediante SELECT parametrizado (?) y politica estricta DENY-BY-DEFAULT: si el usuario
+     no provee un order_code, cups_code, city o filtro de pendientes, lookup_clinical_orders
+     debe retornar [] (cero filas) y limitar resultados a maximo 3 registros sin PII.
+
+================================================================================
+3. DEFENSA DE SEGURIDAD IA EN 5 ANILLOS Y CUMPLIMIENTO LEY 1581
+================================================================================
+1. Anillo 1a (Entrada <30ms - Model Armor + Reglas Hospitalarias):
+   Bloquear con HTTP 403 ("verdict": "BLOCKED", "filter_match": "PI_AND_JAILBREAK:...")
+   todo intento en espanol o ingles de:
+   - System Override / Jailbreak / extraccion de system prompt.
+   - Inyeccion SQL (SELECT *, UNION SELECT, DROP TABLE, confidential = 1).
+   - Volcado masivo en lenguaje natural (BULK_EXFILTRATION_DUMP: "dump", "volcado",
+     "muestrame toda la informacion de esa tabla", "todas las filas de la base de datos").
+   - Enumeracion de esquemas y recursos internos (SCHEMA_RESOURCE_ENUMERATION:
+     "a que recursos puedes conectarte", "que tablas existen", information_schema).
+   - SSRF al Metadata Server (169.254.169.254, metadata.google.internal).
+2. Anillo 1b (Filtro RAG): Escanear cada fragmento de Vertex AI Search descartando
+   documentos con Indirect Prompt Injection antes de armar el prompt.
+3. Anillo 2 (Cloud DLP en Linea - Ley 1581): Anonimizar antes y despues de Gemini
+   Cedula colombiana CC ([REDACTED_COLOMBIA_CC] -> COLOMBIA_CDC_NUMBER), tarjetas
+   ([REDACTED_PAYMENT_CARD] -> CREDIT_CARD_NUMBER) y correos ([REDACTED_EMAIL]).
+4. Anillo 3 y 4 (System Instruction Aislada + Salto OIDC Tier 1 -> Tier 2):
+   Omitir nombres reales de tablas/vistas en el system prompt, redactar identificadores
+   internos en salida ([INTERNAL_RESOURCE_REDACTED]) e invocar al microservicio Tier 2
+   con Authorization: Bearer <oidc_id_token>.
+5. Anillo 5 (Gobernanza y Telemetria): Exponer GET /api/agent/card, GET /.well-known/agent.json
+   y GET /api/security/telemetry con consulta UDM lista para Google SecOps.
+
+================================================================================
+4. PIPELINE CI/CD Y DESPLIEGUE SOBRE CLOUD RUN (-v1)
+================================================================================
+- En cloudbuild.yaml mantener los gates paralelos (Least Privilege IaC + pytest,
+  WizCLI v1 dir scan + secret/CVE gate, CodeMender SAST gate para CWE-89/CWE-918 y
+  WizCLI container scan) y configurar:
+  * _PORTAL_SERVICE: "cymbal-health-web-portal-v1"
+  * _AGENT_SERVICE: "cymbal-health-clinical-agent-v3"
+  Para que al pasar el pipeline en verde (_DEPLOY_ON_GREEN=true), actualice el agente
+  interno y sobreescriba en vivo cymbal-health-web-portal-v1 habilitando el asistente IA.
+
