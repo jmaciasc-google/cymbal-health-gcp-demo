@@ -64,10 +64,6 @@ elements {
         name "Cloud Build"
         display_name "Pipeline CI/CD"
       }
-      card artifact_registry as art_reg {
-        name "Artifact Registry"
-        display_name "Contenedores"
-      }
       card ai_platform as codemender {
         name "CodeMender"
         display_name "Sandbox AppSec IA"
@@ -75,6 +71,10 @@ elements {
       card security_command_center as wiz_code {
         name "Wiz Code"
         display_name "Seguridad CI/CD"
+      }
+      card artifact_registry as art_reg {
+        name "Artifact Registry"
+        display_name "Contenedores"
       }
     }
 
@@ -166,29 +166,27 @@ elements {
 }
 
 paths {
-  # 1. Columna 0 <-> Columna 1 (100% alineados horizontalmente sin solapamientos!)
   admin_linktic -right-> gemini_ent
   dev_linktic .right.> gemini_ent
   dev_linktic -right-> agy_pc
   github_repo <-right- agy_pc
   github_repo -right-> cloud_build
 
-  cloud_build -down-> art_reg
-  art_reg -down-> codemender
-  codemender -down-> wiz_code
+  cloud_build -down-> codemender
+  cloud_build -right-> art_reg
+  codemender -right-> wiz_code
+  wiz_code -up-> art_reg
 
   usuarios_v1 -right-> lb_v1 : "HTTPS"
   lb_v1 -down-> waf_v1
 
-  # 2. Columna 1 <-> Columna 2 (Arriba: Gmail y Drive -> Gemini Enterprise | Abajo: CI/CD + WAF -> Web Portal)
   gemini_ent <-right- gmail_ws
   gemini_ent <-right- drive_ws
 
   art_reg -right-> portal_v1
-  waf_v1 -right-> portal_v1
+  waf_v1 -up-> portal_v1
   portal_v1 .down.> sa_portal_v1
 
-  # 3. Columna 2 -> Columna 3 -> Columna 4 -> Columna 5 <- Columna 6
   portal_v1 -right-> vpc_v1
   vpc_v1 -down-> db_v1
   sa_portal_v1 .right.> pdf_v1
@@ -197,21 +195,22 @@ paths {
 
   logs_v1 -right-> google_secops
   logs_v1 -right-> wiz_cloud
-  google_secops <.right. gcp_api
-  wiz_cloud <-right- gcp_api
 
-  # 4. Orden vertical explicito por columna
+  wiz_cloud <-down- gcp_api
+  google_secops <.down. gcp_api
+
   admin_linktic (-down->) dev_linktic
   dev_linktic (-down->) github_repo
   github_repo (-down->) usuarios_v1
 
   gemini_ent (-down->) agy_pc
   agy_pc (-down->) cloud_build
-  wiz_code (-down->) lb_v1
+  codemender (-down->) lb_v1
 
   gmail_ws (-down->) drive_ws
   drive_ws (-down->) portal_v1
 
   db_v1 (-down->) pdf_v1
   google_secops (-down->) wiz_cloud
+  wiz_cloud (-down->) gcp_api
 }
