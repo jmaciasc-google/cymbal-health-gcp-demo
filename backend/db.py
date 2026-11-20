@@ -1,27 +1,52 @@
-"""Database access layer for Cymbal Health v1.0 Clinical Authorizations Portal.
+"""Database access layer for Cymbal Health Clinical Authorizations Portal.
 
 Connects to Cloud SQL for PostgreSQL 15 over Private IP using IAM Database
-Authentication (keyless OAuth2 access token via Google Cloud ADC — zero static
+Authentication (keyless OAuth2 access token via Google Cloud ADC - zero static
 passwords), with a deterministic SQLite mirror for local execution and CI tests.
+Enforces strict read-only parameterized SELECT validation on `clinical_orders_public_v`
+for AI clinical agent queries.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import threading
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Sequence
 
 from backend.seed_data import DEFAULT_PREFILLED_ORDER, SEED_CLINICAL_ORDERS
 
 _DB_LOCK = threading.Lock()
 _SHARED_CONN: sqlite3.Connection | None = None
 
+_FORBIDDEN_SQL_TOKENS_RE = re.compile(
+    r"\b("
+    r"INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|REPLACE|ATTACH|DETACH|"
+    r"PRAGMA|GRANT|REVOKE|UNION|INTO|EXEC|EXECUTE|CALL|"
+    r"INFORMATION_SCHEMA|PG_CATALOG|PG_TABLES|PG_ROLES|SQLITE_MASTER|SQLITE_TEMP_MASTER|"
+    r"CONFIDENTIAL"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_SQL_COMMENT_OR_MULTI_RE = re.compile(r"(--|/\*|\*/|;)")
+_SELECT_STAR_RE = re.compile(r"^\s*SELECT\s+\*", re.IGNORECASE)
+_FROM_PUBLIC_VIEW_RE = re.compile(r"\bFROM\s+clinical_orders_public_v\b", re.IGNORECASE)
+_BASE_TABLE_DIRECT_RE = re.compile(r"\bclinical_orders\b(?!_public_v)", re.IGNORECASE)
+_JOIN_CLAUSE_RE = re.compile(r"\bJOIN\b", re.IGNORECASE)
+
+
+class ReadOnlyPolicyViolationError(PermissionError):
+    """Raised when an AI agent query violates the read-only `clinical_orders_public_v` SQL policy."""
+
 
 def get_iam_db_auth_metadata() -> dict[str, Any]:
     """Returns Cloud SQL IAM Database Authentication configuration metadata."""
     project_id = os.getenv("GCP_PROJECT_ID", "cymbal-health-prod")
+    region = os.getenv("GCP_REGION", "us-central1")
+    instance_name = os.getenv("DB_INSTANCE_NAME", "cymbal-health-pg-main")
     use_cloud_sql = (
         os.getenv("USE_CLOUD_SQL_IAM_AUTH", "false").lower() == "true"
         or bool(os.getenv("DB_INSTANCE_CONNECTION_NAME"))
@@ -29,7 +54,7 @@ def get_iam_db_auth_metadata() -> dict[str, Any]:
     instance_conn = (
         os.getenv("DB_INSTANCE_CONNECTION_NAME")
         or os.getenv("CLOUD_SQL_CONNECTION_NAME")
-        or f"{project_id}:us-central1:cymbal-health-pg-main"
+        or f"{project_id}:{region}:{instance_name}"
     )
     portal_db_user = (
         os.getenv("DB_IAM_USER")
@@ -146,6 +171,69 @@ def reset_database() -> None:
         if _SHARED_CONN is not None:
             _SHARED_CONN.close()
         _SHARED_CONN = _init_sqlite_connection()
+
+
+def validate_readonly_agent_sql(sql: str) -> str:
+    """Validates that an AI agent SQL query is a strictly parameterized SELECT on `clinical_orders_public_v`."""
+    cleaned = (sql or "").strip()
+    if cleaned.endswith(";"):
+        cleaned = cleaned[:-1].strip()
+    if not cleaned:
+        raise ReadOnlyPolicyViolationError("Empty SQL query rejected by read-only policy.")
+
+    if _SQL_COMMENT_OR_MULTI_RE.search(cleaned):
+        raise ReadOnlyPolicyViolationError(
+            "SQL comments and stacked statements are prohibited."
+        )
+
+    if not cleaned.upper().startswith("SELECT "):
+        raise ReadOnlyPolicyViolationError("Only read-only SELECT statements are allowed.")
+
+    if _SELECT_STAR_RE.search(cleaned):
+        raise ReadOnlyPolicyViolationError(
+            "Wildcard SELECT * projection is prohibited; specify explicit non-PII columns."
+        )
+
+    if _FORBIDDEN_SQL_TOKENS_RE.search(cleaned):
+        raise ReadOnlyPolicyViolationError(
+            "Forbidden DDL/DML, system catalog, or confidential column reference detected."
+        )
+
+    if _BASE_TABLE_DIRECT_RE.search(cleaned) or _JOIN_CLAUSE_RE.search(cleaned):
+        raise ReadOnlyPolicyViolationError(
+            "Direct table access or JOINs outside authorized view are prohibited."
+        )
+
+    if not _FROM_PUBLIC_VIEW_RE.search(cleaned):
+        raise ReadOnlyPolicyViolationError(
+            "Agent queries must target clinical_orders_public_v exclusively."
+        )
+
+    if "'" in cleaned and re.search(r"\bOR\b\s+['\d]", cleaned, re.IGNORECASE):
+        raise ReadOnlyPolicyViolationError(
+            "Unparameterized boolean tautology detected in SQL statement."
+        )
+
+    return cleaned
+
+
+def execute_readonly_agent_query(
+    sql: str,
+    params: Sequence[Any] = (),
+) -> list[dict[str, Any]]:
+    """Validates and executes a parameterized read-only SELECT query on `clinical_orders_public_v`."""
+    validated_sql = validate_readonly_agent_sql(sql)
+    safe_params = tuple(params)
+    expected_placeholders = validated_sql.count("?")
+    if expected_placeholders != len(safe_params):
+        raise ReadOnlyPolicyViolationError(
+            "Parameter count mismatch in parameterized read-only query."
+        )
+
+    conn = get_connection()
+    with _DB_LOCK:
+        rows = conn.execute(validated_sql, safe_params).fetchall()
+    return [dict(r) for r in rows]
 
 
 def list_public_orders(status_filter: str | None = None) -> list[dict[str, Any]]:
