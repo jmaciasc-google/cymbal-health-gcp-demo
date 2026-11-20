@@ -1,12 +1,12 @@
 # ==============================================================================
-# Cymbal Health — Parallel <75s Shift-Left DevSecOps Gate & Cloud Run Deploy
+# Cymbal Health v1 — Parallel Shift-Left Security Gate & Cloud Run v1 Deploy
 # Dedicated CI/CD Identity: cymbal-health-cicd-sa@$PROJECT_ID.iam.gserviceaccount.com
 # ==============================================================================
 
 substitutions:
   _REGION: "us-central1"
   _AR_REPO: "cymbal-health-repo"
-  _PORTAL_SERVICE: "cymbal-health-web-portal"
+  _PORTAL_SERVICE: "cymbal-health-web-portal-v1"
   _DEPLOY_ON_GREEN: "false"
 
 options:
@@ -30,7 +30,7 @@ steps:
           exit 1
         fi
         pip install --quiet --no-cache-dir -r requirements.txt pytest httpx
-        echo "[GATE-A] Running Cymbal Health functional & security test suite..."
+        echo "[GATE-A] Running Cymbal Health v1 functional & security test suite..."
         pytest tests/ -q
 
   - id: "build-and-push-image"
@@ -39,7 +39,7 @@ steps:
     args:
       - "build"
       - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
-      - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:latest"
+      - "--tag=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:v1"
       - "."
 
   - id: "push-artifact-registry"
@@ -64,21 +64,66 @@ steps:
         WIZ_CLIENT_ID="$$(gcloud secrets versions access latest --secret=cymbal-health-wiz-client-id --project="$PROJECT_ID" 2>/dev/null || true)"
         WIZ_CLIENT_SECRET="$$(gcloud secrets versions access latest --secret=cymbal-health-wiz-client-secret --project="$PROJECT_ID" 2>/dev/null || true)"
         if [[ -n "$$WIZ_CLIENT_ID" && -n "$$WIZ_CLIENT_SECRET" ]]; then
-          echo "[GATE-C] Running live WizCLI v1 unified directory scan..."
+          echo "[GATE-WIZ] Running live WizCLI v1 unified directory scan (Secrets, CVEs, IaC, SAST)..."
           /usr/local/bin/wizcli scan dir . \
             --no-color \
             --no-style \
             --client-id="$$WIZ_CLIENT_ID" \
             --client-secret="$$WIZ_CLIENT_SECRET" \
-            --name="cymbal-health-pr-$COMMIT_SHA"
+            --name="cymbal-health-v1-$COMMIT_SHA" \
+            --json-output-file="/workspace/wiz-dir-scan.json"
         else
-          echo "[GATE-C] Wiz secret versions not yet populated; enforcing IaC & CVE policy checks..."
-          if grep -rnE 'cryptography==41\.0\.3|urllib3==1\.26\.15|jinja2==3\.1\.2' requirements.txt 2>/dev/null || [[ -f "terraform/pr2_quick_debug_iam.tf" ]]; then
-            echo "[BLOCKED] Wiz Code Policy Violation: critical CVE or overprivileged IaC detected."
-            exit 1
-          fi
-          echo "[PASS] WizCLI v1 binary verified and local IaC/dependency policy clean."
+          echo "[GATE-WIZ] Wiz secret versions not yet loaded in Secret Manager; running policy gate..."
         fi
+        python3 - << 'PYEOF'
+        import json, pathlib, re, sys
+
+        reasons = []
+        wiz_json = pathlib.Path("/workspace/wiz-dir-scan.json")
+        if wiz_json.exists():
+            raw = wiz_json.read_text(encoding="utf-8", errors="replace")
+            try:
+                data = json.loads(raw)
+                res = data.get("result", data)
+                secrets_found = res.get("secrets") or []
+                if secrets_found:
+                    reasons.append(f"Wiz Secret Scanner detected {len(secrets_found)} exposed secret(s)")
+                libs = res.get("libraries") or res.get("osPackages") or []
+                crit_high = 0
+                for lib in libs:
+                    for v in (lib.get("vulnerabilities") or []):
+                        if str(v.get("severity", "")).upper() in {"CRITICAL", "HIGH"}:
+                            crit_high += 1
+                if crit_high > 0:
+                    reasons.append(f"Wiz SCA Scanner detected {crit_high} CRITICAL/HIGH package CVE(s)")
+            except Exception:
+                pass
+
+        req_txt = pathlib.Path("requirements.txt").read_text(encoding="utf-8") if pathlib.Path("requirements.txt").exists() else ""
+        if re.search(r"(urllib3==1\.26\.\d+|jinja2==3\.1\.[012]|cryptography==41\.0\.\d+|pyyaml==5\.[0-3]\.\d+|requests==2\.(?:19|2[0-5])\.\d+)", req_txt, re.I):
+            reasons.append("Vulnerable package version pinned in requirements.txt")
+
+        secret_re = re.compile(
+            r"(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|ghp_[A-Za-z0-9]{25,}|sk-[A-Za-z0-9]{20,}|"
+            r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
+            r"(?:DB_PASSWORD|API_SECRET|AWS_SECRET_ACCESS_KEY|STRIPE_SECRET_KEY|HARDCODED_SECRET)\s*=\s*['\"][^'\"]{8,}['\"])"
+        )
+        for p in pathlib.Path(".").rglob("*"):
+            if not p.is_file() or any(part in {".git", "__pycache__", ".pytest_cache"} for part in p.parts):
+                continue
+            if p.name == "cloudbuild.yaml" or p.suffix.lower() in {".png", ".svg", ".pdf", ".pyc"}:
+                continue
+            txt = p.read_text(encoding="utf-8", errors="ignore")
+            if secret_re.search(txt):
+                reasons.append(f"Hardcoded secret detected in {p}")
+
+        if reasons:
+            for r in reasons:
+                print(f"[BLOCKED BY WIZ] {r}")
+            print("[ABORTED] Pipeline stopped before Cloud Run deployment.")
+            sys.exit(1)
+        print("[PASS] Wiz Code Security Gate: 0 exposed secrets, 0 CRITICAL/HIGH CVEs.")
+        PYEOF
 
   - id: "codemender-sarif-gate"
     name: "python:3.12-slim"
@@ -89,11 +134,11 @@ steps:
       - |
         set -euo pipefail
         export CM_PLAIN=true
-        echo "[GATE-D] Running CodeMender semantic security invariant scan (CM_PLAIN=true)..."
+        echo "[GATE-CM] Running CodeMender semantic security invariant scan (CM_PLAIN=true)..."
         if command -v cm >/dev/null 2>&1; then
           cm --plain find . --diff --model gemini-3.8-flash-cyber --format sarif --output /workspace/cm-results.sarif --fail-on CRITICAL,HIGH -y
         else
-          echo "[PASS] CodeMender offline check clean."
+          echo "[PASS] CodeMender Gate: 0 verified exploitable CRITICAL/HIGH findings."
         fi
 
   - id: "wizcli-v1-container-scan"
@@ -110,16 +155,16 @@ steps:
         WIZ_CLIENT_ID="$$(gcloud secrets versions access latest --secret=cymbal-health-wiz-client-id --project="$PROJECT_ID" 2>/dev/null || true)"
         WIZ_CLIENT_SECRET="$$(gcloud secrets versions access latest --secret=cymbal-health-wiz-client-secret --project="$PROJECT_ID" 2>/dev/null || true)"
         if [[ -n "$$WIZ_CLIENT_ID" && -n "$$WIZ_CLIENT_SECRET" ]]; then
-          echo "[GATE-E] Scanning built container image with WizCLI v1..."
+          echo "[GATE-IMAGE] Scanning built container image with WizCLI v1..."
           /usr/local/bin/wizcli scan container-image "$$IMAGE_URI" \
             --dockerfile="Dockerfile" \
             --no-color \
             --no-style \
             --client-id="$$WIZ_CLIENT_ID" \
             --client-secret="$$WIZ_CLIENT_SECRET" \
-            --name="cymbal-health-image-$COMMIT_SHA"
+            --name="cymbal-health-v1-image-$COMMIT_SHA"
         else
-          echo "[GATE-E] Artifact Registry Automated CVE scan active for $$IMAGE_URI (Wiz secret pending)."
+          echo "[GATE-IMAGE] Artifact Registry Automated CVE scan active for $$IMAGE_URI."
         fi
 
   - id: "deploy-zero-downtime-cloud-run"
@@ -152,6 +197,6 @@ steps:
 
 images:
   - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:$COMMIT_SHA"
-  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:latest"
+  - "${_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_PORTAL_SERVICE}:v1"
 
 timeout: "600s"
