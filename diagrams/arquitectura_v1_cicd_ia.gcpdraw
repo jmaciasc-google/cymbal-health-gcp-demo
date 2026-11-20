@@ -21,7 +21,7 @@ elements {
   }
 
   group third_party_scm {
-    name "Codigo Fuente (3P)"
+    name "Codigo Fuente"
     background_color "#F8F9FA"
 
     card git as github_repo {
@@ -43,7 +43,7 @@ elements {
 
   gcp {
     group ideacion_codigo {
-      name "Herramienta de IA Interna"
+      name "Herramientas de IA Interna"
       background_color "#E8F0FE"
 
       card vertex_ai as gemini_ent {
@@ -64,13 +64,13 @@ elements {
         name "Cloud Build"
         display_name "Pipeline CI/CD"
       }
-      card ai_platform as codemender {
-        name "CodeMender"
-        display_name "Sandbox AppSec IA"
-      }
       card security_command_center as wiz_code {
         name "Wiz Code"
         display_name "Seguridad CI/CD"
+      }
+      card ai_platform as codemender {
+        name "CodeMender"
+        display_name "Sandbox AppSec IA"
       }
       card artifact_registry as art_reg {
         name "Artifact Registry"
@@ -172,10 +172,10 @@ paths {
   github_repo <-right- agy_pc
   github_repo -right-> cloud_build
 
-  cloud_build -down-> codemender
-  cloud_build -right-> art_reg
-  codemender -right-> wiz_code
-  wiz_code -up-> art_reg
+  cloud_build -down-> wiz_code
+  cloud_build (-right->) art_reg
+  wiz_code -right-> codemender
+  codemender -up-> art_reg
 
   usuarios_v1 -right-> lb_v1 : "HTTPS"
   lb_v1 -down-> waf_v1
@@ -205,7 +205,7 @@ paths {
 
   gemini_ent (-down->) agy_pc
   agy_pc (-down->) cloud_build
-  codemender (-down->) lb_v1
+  wiz_code (-down->) lb_v1
 
   gmail_ws (-down->) drive_ws
   drive_ws (-down->) portal_v1
