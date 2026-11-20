@@ -1,0 +1,88 @@
+# Cymbal Health v1: Arquitectura Base Web Serverless (Sin IA)
+
+meta {
+  title "Cymbal Health v1: Arquitectura Web Serverless (Sin Agente IA)"
+}
+
+elements {
+  card laptop_and_phone as usuarios_v1 {
+    name "Usuarios"
+    display_name "Navegador HTTPS"
+  }
+
+  gcp {
+    group perimetro_v1 {
+      name "Perimetro Global"
+      background_color "#E8F0FE"
+
+      card load_balancer as lb_v1 {
+        name "Load Balancer"
+        display_name "HTTPS Global"
+      }
+      card armor as waf_v1 {
+        name "Cloud Armor"
+        display_name "WAF OWASP"
+      }
+    }
+
+    group app_v1 {
+      name "Aplicacion"
+      background_color "#E6F4EA"
+
+      stacked_card run as portal_v1 {
+        name "Web Portal"
+        display_name "Cloud Run"
+      }
+      card iam as sa_portal_v1 {
+        name "Service Account"
+        display_name "Least Privilege"
+      }
+    }
+
+    group datos_v1 {
+      name "Red y Datos Privados"
+      background_color "#FEF7E0"
+
+      card vpc as vpc_v1 {
+        name "Private VPC"
+        display_name "Red Aislada"
+      }
+      card sql as db_v1 {
+        name "Orders DB"
+        display_name "Cloud SQL PostgreSQL"
+      }
+      card storage as pdf_v1 {
+        name "PDF Storage"
+        display_name "Cloud Storage"
+      }
+    }
+
+    group ops_v1 {
+      name "Monitoreo"
+      background_color "#F3E8FD"
+
+      card logging as logs_v1 {
+        name "Audit Logs"
+        display_name "Cloud Logging"
+      }
+    }
+  }
+}
+
+paths {
+  usuarios_v1 -right-> lb_v1 : "HTTPS"
+  lb_v1 -down-> waf_v1
+  waf_v1 -right-> portal_v1
+  portal_v1 .down.> sa_portal_v1
+
+  portal_v1 -right-> vpc_v1
+  vpc_v1 -down-> db_v1
+  db_v1 (-down->) pdf_v1
+  sa_portal_v1 .right.> pdf_v1
+
+  pdf_v1 .right.> logs_v1
+  db_v1 .right.> logs_v1
+  waf_v1 .left.> logs_v1
+  lb_v1 .left.> logs_v1
+  portal_v1 .down.> logs_v1
+}

@@ -26,16 +26,16 @@ elements {
     }
 
     group app_v1 {
-      name "Aplicacion v1"
+      name "Aplicacion"
       background_color "#E6F4EA"
 
       stacked_card run as portal_v1 {
-        name "Web Portal v1"
+        name "Web Portal"
         display_name "Cloud Run"
       }
       card iam as sa_portal_v1 {
-        name "Portal Identity"
-        display_name "Service Account"
+        name "Service Account"
+        display_name "Least Privilege"
       }
     }
 
@@ -58,13 +58,9 @@ elements {
     }
 
     group ops_v1 {
-      name "CI/CD y Monitoreo"
+      name "Monitoreo"
       background_color "#F3E8FD"
 
-      card build as cicd_v1 {
-        name "CI/CD Pipeline"
-        display_name "Cloud Build + Wiz"
-      }
       card logging as logs_v1 {
         name "Audit Logs"
         display_name "Cloud Logging"
@@ -84,7 +80,9 @@ paths {
   db_v1 (-down->) pdf_v1
   sa_portal_v1 .right.> pdf_v1
 
-  vpc_v1 .right.> cicd_v1
+  pdf_v1 .right.> logs_v1
   db_v1 .right.> logs_v1
-  cicd_v1 (-down->) logs_v1
+  waf_v1 .left.> logs_v1
+  lb_v1 .left.> logs_v1
+  portal_v1 .down.> logs_v1
 }
