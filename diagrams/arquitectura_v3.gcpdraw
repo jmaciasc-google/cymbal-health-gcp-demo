@@ -119,10 +119,11 @@ paths {
   agent_v3 .down.> sa_agent_v3
   sa_agent_v3 .down.> registry_v3
 
-  # Accesos limpios del Agente IA -> Orders DB, PDF Storage y Seguridad IA/RAG
+  # Accesos limpios del Agente IA -> Orders DB y Seguridad IA/RAG
   db_v3 <-down- agent_v3
   agent_v3 -right-> guardrails_v3
   guardrails_v3 -down-> gemini_v3
+  guardrails_v3 .down.> logs_v3
   gemini_v3 -down-> search_v3
 
   # Auditoria punteada hacia Monitoreo (LB, Cloud Armor, Web Portal y Clinical Agent)
