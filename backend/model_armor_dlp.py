@@ -265,7 +265,7 @@ def inspect_and_sanitize_prompt(
         "traceId": resolved_trace,
         "callerIp": caller_ip,
         "principalEmail": principal_email,
-        "serviceName": "cymbal-health-clinical-agent",
+        "serviceName": "cymbal-health-clinical-agent-v3",
         "serviceAccount": f"cymbal-health-agent-sa@{project_id}.iam.gserviceaccount.com",
         "modelArmorTemplate": model_armor_template,
         "modelArmorVerdict": verdict,

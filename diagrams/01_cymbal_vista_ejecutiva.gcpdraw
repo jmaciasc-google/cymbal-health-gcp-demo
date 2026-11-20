@@ -66,7 +66,7 @@ elements {
       }
       stacked_card run as portal_tier1 {
         name "Portal Web Tier 1"
-        display_name "Cloud Run (v1 -> v2)"
+        display_name "Cloud Run (v1 -> v3)"
       }
       card storage as cloud_storage {
         name "Cloud Storage"

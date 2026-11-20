@@ -181,11 +181,11 @@ def get_agent_registry_card() -> dict[str, Any]:
         "adkAgentName": getattr(CYMBAL_ADK_AGENT, "name", "cymbal_clinical_agent"),
         "displayName": "Cymbal Health Clinical Pertinence & CUPS Assistant",
         "framework": "Google Agent Development Kit (google-adk 2.14.1 + google-genai 2.34.0)",
-        "version": "2.0.0",
+        "version": "3.0.0",
         "status": "GOVERNED_ACTIVE",
         "hosting": {
             "platform": "Google Cloud Run (Tier 2 Internal)",
-            "serviceName": "cymbal-health-clinical-agent",
+            "serviceName": "cymbal-health-clinical-agent-v3",
             "serviceUrl": os.getenv(
                 "CLINICAL_AGENT_URL", "https://cymbal-health-clinical-agent.internal"
             ),
@@ -495,7 +495,7 @@ def _record_tier2_telemetry_on_tier1(
                 "traceId": payload_dict.get("trace_id", ""),
                 "callerIp": caller_ip,
                 "principalEmail": principal_email,
-                "serviceName": "cymbal-health-clinical-agent",
+                "serviceName": "cymbal-health-clinical-agent-v3",
                 "modelArmorVerdict": payload_dict.get("verdict", "UNKNOWN"),
                 "filterMatch": payload_dict.get("filter_match"),
                 "dlpInfoTypes": payload_dict.get("dlp_findings", []),

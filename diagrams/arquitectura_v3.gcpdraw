@@ -1,0 +1,113 @@
+# Cymbal Health v3: Arquitectura Final con Agente IA Seguro
+
+meta {
+  title "Cymbal Health v3: Portal Web + Agente Clinico IA Seguro"
+}
+
+elements {
+  card laptop_and_phone as usuarios_v3 {
+    name "Personal Medico"
+    display_name "Portal + Asistente IA"
+  }
+
+  gcp {
+    group perimetro_v3 {
+      name "Perimetro y Web v3"
+      background_color "#E8F0FE"
+
+      card armor as waf_v3 {
+        name "Load Balancer + WAF"
+        display_name "HTTPS + Cloud Armor"
+      }
+      stacked_card run as portal_v3 {
+        name "Web Portal v3"
+        display_name "Cloud Run"
+      }
+      card iam as sa_portal_v3 {
+        name "Portal Identity"
+        display_name "Service Account"
+      }
+    }
+
+    group agente_v3 {
+      name "Capa Agente Interno"
+      background_color "#E6F4EA"
+
+      stacked_card run as agent_v3 {
+        name "Clinical Agent v3"
+        display_name "Cloud Run + ADK"
+      }
+      card iam as sa_agent_v3 {
+        name "Agent Identity"
+        display_name "Service Account"
+      }
+    }
+
+    group ia_datos_v3 {
+      name "Seguridad IA y Datos"
+      background_color "#FEF7E0"
+
+      card data_loss_prevention as guardrails_v3 {
+        name "Model Armor + DLP"
+        display_name "Guardrails IA"
+      }
+      card ai_platform as search_v3 {
+        name "Protocols Search"
+        display_name "Vertex AI Search"
+      }
+      card vertex_ai as gemini_v3 {
+        name "Gemini Model"
+        display_name "Vertex AI"
+      }
+      card sql as db_v3 {
+        name "Orders DB"
+        display_name "Cloud SQL Read-Only"
+      }
+      card storage as buckets_v3 {
+        name "Private Storage"
+        display_name "PDFs y Protocolos"
+      }
+    }
+
+    group gov_v3 {
+      name "Gobernanza y SecOps"
+      background_color "#F3E8FD"
+
+      card ai_hub as registry_v3 {
+        name "Agent Registry"
+        display_name "Catalogo IA"
+      }
+      card logging as logs_v3 {
+        name "Audit Logs"
+        display_name "Cloud Logging"
+      }
+      card security_command_center as secops_v3 {
+        name "SecOps + Wiz"
+        display_name "SIEM y CNAPP"
+      }
+    }
+  }
+}
+
+paths {
+  usuarios_v3 -right-> waf_v3 : "HTTPS"
+  waf_v3 -down-> portal_v3
+  portal_v3 .down.> sa_portal_v3
+
+  portal_v3 -right-> agent_v3
+  agent_v3 .down.> sa_agent_v3
+
+  agent_v3 -right-> guardrails_v3
+  guardrails_v3 -down-> search_v3
+  search_v3 -down-> gemini_v3
+  gemini_v3 (-down->) db_v3
+  db_v3 (-down->) buckets_v3
+
+  sa_agent_v3 .right.> db_v3
+  sa_portal_v3 .right.> buckets_v3
+
+  guardrails_v3 .right.> registry_v3
+  search_v3 .right.> logs_v3
+  registry_v3 (-down->) logs_v3
+  logs_v3 -down-> secops_v3
+}

@@ -31,11 +31,11 @@ elements {
       background_color "#E6F4EA"
 
       stacked_card run as run_portal {
-        name "cymbal-health-web-portal"
-        display_name "Cloud Run (UID 10001)"
+        name "Web Portal"
+        display_name "Cloud Run "
       }
       card iam as sa_portal {
-        name "cymbal-health-portal-sa"
+        name "Portal Identity"
         display_name "SA Dedicada Tier 1"
       }
     }
@@ -45,19 +45,19 @@ elements {
       background_color "#FEF7E0"
 
       stacked_card run as run_agent {
-        name "cymbal-health-clinical-agent"
-        display_name "Cloud Run ADK (UID 10001)"
+        name "Clinical Agent"
+        display_name "Cloud Run ADK "
       }
       card iam as sa_agent {
-        name "cymbal-health-agent-sa"
+        name "Agent Identity"
         display_name "SA Dedicada Tier 2"
       }
       card run as run_mcp {
-        name "cymbal-health-backlog-mcp"
-        display_name "Cloud Run MCP (UID 10001)"
+        name "Backlog MCP"
+        display_name "Cloud Run MCP "
       }
       card iam as sa_mcp {
-        name "cymbal-health-mcp-sa"
+        name "MCP Identity"
         display_name "SA Dedicada MCP"
       }
     }
