@@ -55,9 +55,27 @@ _PI_JAILBREAK_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "DATA_EXFIL_CONFIDENTIAL",
         re.compile(
-            r"(select\s+\*\s+from\s+clinical_orders\b|dump\s+confidential|"
-            r"bypass\s+ley\s*1581|extrae\s+todos\s+los\s+registros\s+restringidos|"
+            r"(select\s+\*\s+from\s+|dump\s+confidential|"
+            r"bypass\s+ley\s*1581|extrae\s+todos\s+los\s+registros|"
             r"drop\s+table|union\s+select|confidential\s*=\s*1)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "BULK_EXFILTRATION_DUMP",
+        re.compile(
+            r"(\bdump\b|\bvolcado\b|toda(?:s)?\s+la(?:s)?\s+(?:informacion|info|data|filas|registros)\s+de\s+(?:la|esa|esta)?\s*(?:tabla|base|bd|vista)|"
+            r"(?:muestrame|dame|lista|extrae|exporta|descarga|imprime)\s+(?:toda|todo|todos|todas)\s+(?:la\s+tabla|las\s+filas|los\s+registros|la\s+base\s+de\s+datos|el\s+contenido\s+de\s+la\s+tabla)|"
+            r"\ball\s+rows\b|\bentire\s+table\b|\bdatabase\s+dump\b|\bexport\s+all\s+records\b)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "SCHEMA_RESOURCE_ENUMERATION",
+        re.compile(
+            r"(a\s+que\s+(?:recursos|tablas|bases\s+de\s+datos|buckets|servicios|infraestructura|conexiones)\s+(?:puedes\s+)?(?:conectarte|acceder|tienes\s+acceso)|"
+            r"(?:que|cuales)\s+(?:tablas|vistas|esquemas|bases\s+de\s+datos|buckets|credenciales|service\s+accounts)\s+(?:existen|tienes|usas|manejas)|"
+            r"\binformation_schema\b|\bpg_catalog\b|\bpg_tables\b|\bsqlite_master\b|\bshow\s+tables\b|\bdescribe\s+table\b)",
             re.IGNORECASE,
         ),
     ),
@@ -207,9 +225,18 @@ def sanitize_rag_chunks(chunks: list[ProtocolChunk]) -> tuple[list[ProtocolChunk
     return safe_chunks, quarantined
 
 
+_INTERNAL_IDENTIFIER_PATTERN = re.compile(
+    r"\b(?:clinical_orders_public_v|clinical_orders|cymbal_agent_readonly|"
+    r"cymbal-health-pg-main|cymbal-health-soportes(?:-\d+)?|cymbal-health-protocols(?:-\d+)?|"
+    r"cymbal-health-(?:portal|agent|mcp|cicd)-sa)\b",
+    re.IGNORECASE,
+)
+
+
 def sanitize_model_response(response_text: str) -> str:
-    """Ring 1c: Scrubs model output against accidental PII or system instruction leakage."""
+    """Ring 1c: Scrubs model output against accidental PII, schema/resource names, or system prompt leakage."""
     masked_out, _ = mask_colombian_pii_dlp(response_text)
+    masked_out = _INTERNAL_IDENTIFIER_PATTERN.sub("[INTERNAL_RESOURCE_REDACTED]", masked_out)
     if re.search(r"SYSTEM_INSTRUCTION_CONFIDENTIAL_MARKER", masked_out):
         return "Respuesta retenida por politica de seguridad de salida de Model Armor."
     return masked_out
